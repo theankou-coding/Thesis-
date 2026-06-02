@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Brain, FileText, Loader2 } from "lucide-react";
+import { Upload, Brain, FileText, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@/lib/wouter-compat";
 
 export default function UploadCV() {
   const { isAuthenticated } = useAuth();
@@ -62,7 +63,7 @@ export default function UploadCV() {
   };
 
   return (
-    <div className="container py-10">
+    <div className="container py-10 bg-background text-foreground min-h-screen">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">Upload & Analyze Your CV</h1>
         <p className="mt-2 text-muted-foreground">Upload a file or paste your CV text to receive intelligent job recommendations and AI career analysis.</p>
@@ -71,14 +72,14 @@ export default function UploadCV() {
       <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         {/* Input panel */}
         <div className="space-y-6">
-          <Card className="shadow-sm">
+          <Card className="shadow-sm bg-card text-card-foreground border-border">
             <CardContent className="pt-6">
               <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center">
                 <input ref={fileRef} type="file" accept=".txt,.md,.csv,.pdf,.doc,.docx" onChange={handleFile} className="hidden" />
                 <Upload className="mx-auto h-10 w-10 text-primary/60" />
                 <p className="mt-3 text-sm font-medium text-foreground">Drop your CV file here or click to browse</p>
                 <p className="mt-1 text-xs text-muted-foreground">Supports TXT, MD, PDF, DOCX</p>
-                <Button variant="outline" size="sm" className="mt-4" onClick={() => fileRef.current?.click()}>
+                <Button variant="outline" size="sm" className="mt-4 bg-background text-foreground hover:bg-muted" onClick={() => fileRef.current?.click()}>
                   Choose File
                 </Button>
                 {fileName && <p className="mt-3 text-sm font-medium text-primary">{fileName}</p>}
@@ -86,22 +87,22 @@ export default function UploadCV() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-base">CV Text for Analysis</CardTitle></CardHeader>
+          <Card className="shadow-sm bg-card text-card-foreground border-border">
+            <CardHeader><CardTitle className="text-base text-foreground">CV Text for Analysis</CardTitle></CardHeader>
             <CardContent>
               <Textarea
                 rows={12}
                 value={cvText}
                 onChange={e => setCvText(e.target.value)}
                 placeholder="Paste your CV content here for matching and analysis..."
-                className="text-sm"
+                className="text-sm bg-background text-foreground border-border"
               />
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <Button onClick={handleAnalyze} disabled={recommend.isPending} className="flex-1">
+                <Button onClick={handleAnalyze} disabled={recommend.isPending} className="flex-1 bg-primary text-primary-foreground hover:bg-primary/95">
                   {recommend.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
                   Match Jobs
                 </Button>
-                <Button onClick={handleLLMAnalysis} disabled={analyzeLLM.isPending} variant="secondary" className="flex-1">
+                <Button onClick={handleLLMAnalysis} disabled={analyzeLLM.isPending} variant="secondary" className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/95 border border-border">
                   {analyzeLLM.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
                   AI Career Analysis
                 </Button>
@@ -111,11 +112,11 @@ export default function UploadCV() {
 
           {/* Detected skills */}
           {recommend.data?.detectedSkills && recommend.data.detectedSkills.length > 0 && (
-            <Card className="shadow-sm">
-              <CardHeader><CardTitle className="text-base">Detected Skills</CardTitle></CardHeader>
+            <Card className="shadow-sm bg-card text-card-foreground border-border">
+              <CardHeader><CardTitle className="text-base text-foreground">Detected Skills</CardTitle></CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-1.5">
-                  {recommend.data.detectedSkills.map(s => <Badge key={s} variant="secondary">{s}</Badge>)}
+                  {recommend.data.detectedSkills.map(s => <Badge key={s} variant="secondary" className="bg-muted text-foreground border-border">{s}</Badge>)}
                 </div>
               </CardContent>
             </Card>
@@ -126,9 +127,9 @@ export default function UploadCV() {
         <div className="space-y-6">
           {/* LLM Analysis */}
           {analyzeLLM.data && (
-            <Card className="shadow-lg border-[hsl(42,78%,52%)]/30">
+            <Card className="shadow-lg border-[hsl(42,78%,52%)]/30 bg-card text-card-foreground">
               <CardHeader className="bg-gradient-to-r from-primary/5 to-[hsl(42,78%,52%)]/10 rounded-t-lg">
-                <CardTitle className="text-lg flex items-center gap-2"><Brain className="h-5 w-5 text-[hsl(42,78%,52%)]" /> AI Career Analysis</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2 text-foreground"><Brain className="h-5 w-5 text-[hsl(42,78%,52%)]" /> AI Career Analysis</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
                 {analyzeLLM.data.skillSummary && (
@@ -148,7 +149,7 @@ export default function UploadCV() {
                     <h4 className="text-sm font-semibold text-primary mb-3">Personalized Rationale</h4>
                     <div className="space-y-3">
                       {analyzeLLM.data.recommendations.map((rec: any, i: number) => (
-                        <div key={i} className="rounded-lg border p-3">
+                        <div key={i} className="rounded-lg border p-3 border-border bg-background">
                           <p className="text-sm font-semibold text-foreground">{rec.jobTitle} — {rec.company}</p>
                           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{rec.rationale}</p>
                         </div>
@@ -161,7 +162,7 @@ export default function UploadCV() {
           )}
 
           {analyzeLLM.isPending && (
-            <Card className="shadow-sm">
+            <Card className="shadow-sm bg-card border-border">
               <CardContent className="py-12 text-center">
                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                 <p className="mt-4 text-sm text-muted-foreground">Generating AI career analysis...</p>
@@ -174,47 +175,54 @@ export default function UploadCV() {
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-foreground">Job Recommendations</h3>
               {recommend.data.recommendations.map((job, idx) => (
-                <Card key={job.id} className="shadow-sm hover:shadow-md transition-shadow">
-                  <CardContent className="pt-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <Badge variant="outline" className="mb-2 text-xs">#{idx + 1}</Badge>
-                        <h4 className="text-base font-semibold text-foreground">{job.title}</h4>
-                        <p className="text-sm text-muted-foreground">{job.company} · {job.location} · {job.type}</p>
-                        <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{job.description}</p>
-                      </div>
-                      <div className="text-center min-w-[70px]">
-                        <p className="text-2xl font-bold text-primary">{job.score}%</p>
-                        <p className="text-xs text-muted-foreground">Match</p>
-                      </div>
-                    </div>
-                    <Progress value={job.score} className="mt-3 h-2" />
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-medium text-foreground mb-1">Matched</p>
-                        <div className="flex flex-wrap gap-1">
-                          {job.matchedSkills.map(s => <Badge key={s} className="text-xs bg-green-50 text-green-700 border-green-200">{s}</Badge>)}
+                <Link key={job.id} href={`/jobs/${job.id}`} className="group block">
+                  <Card className="shadow-sm hover:shadow-md transition-all hover:border-primary/30 border bg-card text-card-foreground">
+                    <CardContent className="pt-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <Badge variant="outline" className="mb-2 text-xs">#{idx + 1}</Badge>
+                          <h4 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors truncate">{job.title}</h4>
+                          <p className="text-sm text-muted-foreground truncate">{job.company} · {job.location} · {job.type}</p>
+                          <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{job.description}</p>
+                        </div>
+                        <div className="text-center min-w-[70px] shrink-0">
+                          <p className="text-2xl font-bold text-primary">{job.score}%</p>
+                          <p className="text-xs text-muted-foreground">Match</p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-medium text-foreground mb-1">To Develop</p>
-                        <div className="flex flex-wrap gap-1">
-                          {job.missingSkills.map(s => <Badge key={s} variant="outline" className="text-xs text-amber-700 border-amber-200">{s}</Badge>)}
+                      <Progress value={job.score} className="mt-3 h-2" />
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs font-medium text-foreground mb-1">Matched</p>
+                          <div className="flex flex-wrap gap-1">
+                            {job.matchedSkills.map(s => <Badge key={s} className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-900/30">{s}</Badge>)}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-foreground mb-1">To Develop</p>
+                          <div className="flex flex-wrap gap-1">
+                            {job.missingSkills.map(s => <Badge key={s} variant="outline" className="text-xs text-amber-700 border-amber-200 dark:text-amber-400 dark:border-amber-900/30">{s}</Badge>)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <p className="mt-3 text-sm font-medium text-primary border-t pt-2">{job.salary} · {job.level}</p>
-                  </CardContent>
-                </Card>
+                      <div className="mt-3 flex items-center justify-between border-t pt-2 border-border/60">
+                        <p className="text-sm font-medium text-primary">{job.salary} · {job.level}</p>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          View details <ArrowRight className="h-3 w-3" />
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}
 
           {!recommend.data && !analyzeLLM.data && !recommend.isPending && !analyzeLLM.isPending && (
-            <Card className="shadow-sm">
+            <Card className="shadow-sm bg-card border-border">
               <CardContent className="py-16 text-center">
                 <FileText className="mx-auto h-12 w-12 text-muted-foreground/40" />
-                <p className="mt-4 text-muted-foreground">Upload or paste your CV text, then click "Match Jobs" or "AI Career Analysis" to see results.</p>
+                <p className="mt-4 text-muted-foreground">Upload or paste your CV text, then click \"Match Jobs\" or \"AI Career Analysis\" to see results.</p>
               </CardContent>
             </Card>
           )}

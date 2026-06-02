@@ -1,5 +1,5 @@
 import { parse as parseCookieHeader } from "cookie";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { User } from "../db";
 import * as db from "../db";
 import { sdk } from "./sdk";
@@ -29,6 +29,23 @@ export function expireSessionCookie(ctx: TrpcContext) {
     "HttpOnly",
     "SameSite=Lax",
     "Max-Age=0",
+    ...(isSecure ? ["Secure"] : []),
+  ].join("; ");
+
+  ctx.responseHeaders.append(
+    "set-cookie",
+    cookie,
+  );
+}
+
+export function setSessionCookie(ctx: TrpcContext, sessionToken: string) {
+  const isSecure = new URL(ctx.req.url).protocol === "https:";
+  const cookie = [
+    `${COOKIE_NAME}=${sessionToken}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(ONE_YEAR_MS / 1000)}`,
     ...(isSecure ? ["Secure"] : []),
   ].join("; ");
 

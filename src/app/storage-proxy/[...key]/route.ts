@@ -6,11 +6,10 @@ type Params = {
 };
 
 /**
- * GET /manus-storage/[...key]
+ * GET /storage-proxy/[...key]
  *
- * Redirects to a short-lived (1-hour) presigned Supabase S3 URL.
- * This route handles private bucket access. Public buckets don't need it —
- * the permanent public URL returned by storagePut can be used directly.
+ * Alias for /manus-storage/[...key].
+ * Generates a 1-hour presigned S3 URL and issues a 307 redirect.
  */
 export async function GET(_request: NextRequest, { params }: Params) {
   const { key } = await params;
@@ -27,4 +26,3 @@ export async function GET(_request: NextRequest, { params }: Params) {
     );
   }
 }
-

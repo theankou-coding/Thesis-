@@ -67,7 +67,7 @@ export function ClientProviders({ children }: Readonly<{ children: React.ReactNo
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
-          <ThemeProvider defaultTheme="light">
+          <ThemeProvider defaultTheme="light" switchable>
             <TooltipProvider>
               <Toaster />
               <div className="flex min-h-screen flex-col">
