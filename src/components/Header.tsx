@@ -23,6 +23,7 @@ export function Header() {
   const { user, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = user?.role === "admin" ? [...mainNav, { href: "/admin", label: "Admin" }] : mainNav;
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
@@ -31,12 +32,12 @@ export function Header() {
         <div className="container flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <img src="/manus-storage/jobcv-logo_f2b0a0df.png" alt="JOB CV" className="h-10" />
+            <img src="logo.png" alt="JOB CV" className="h-10" />
           </Link>
 
           {/* Center nav links */}
           <nav className="hidden items-center gap-1 lg:flex">
-            {mainNav.map((link) => (
+            {navItems.map((link) => (
               <Link key={link.href} href={link.href}>
                 <span className={`px-4 py-2 text-sm font-medium transition-colors rounded-md ${location === link.href ? "text-primary font-semibold" : "text-foreground/70 hover:text-primary"}`}>
                   {link.label}
@@ -92,7 +93,7 @@ export function Header() {
       {mobileOpen && (
         <div className="border-b border-border bg-white p-4 lg:hidden">
           <nav className="flex flex-col gap-2">
-            {mainNav.map((link) => (
+            {navItems.map((link) => (
               <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)}>
                 <span className={`block px-4 py-2 text-sm font-medium rounded-md ${location === link.href ? "bg-primary/10 text-primary" : "text-foreground/70"}`}>
                   {link.label}

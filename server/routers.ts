@@ -1,8 +1,8 @@
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { expireSessionCookie } from "./_core/context";
 import { z } from "zod";
-import { getJobs, getAllJobs, createCvUpload, getUserCvUploads } from "./db";
+import { getJobs, getAllJobs, createCvUpload, getUserCvUploads, getAdminDashboardSnapshot } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
 
@@ -33,6 +33,10 @@ export const appRouter = router({
       expireSessionCookie(ctx);
       return { success: true } as const;
     }),
+  }),
+
+  admin: router({
+    dashboard: adminProcedure.query(() => getAdminDashboardSnapshot()),
   }),
 
   jobs: router({

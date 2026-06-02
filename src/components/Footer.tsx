@@ -6,7 +6,7 @@ export function Footer() {
       <div className="container py-12">
         <div className="grid gap-8 md:grid-cols-3">
           <div>
-            <img src="/manus-storage/jobcv-logo-white_03021615.png" alt="JOB CV" className="h-10 mb-4" />
+            <img src="logo.png" alt="JOB CV" className="h-10 mb-4" />
             <p className="text-sm leading-relaxed text-gray-300">
               A professional career platform that helps candidates create compelling CVs, receive intelligent job recommendations, and connect with opportunities aligned to their skills.
             </p>
