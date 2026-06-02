@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -36,10 +36,14 @@ import {
   CheckCircle,
   Users,
   Eye,
+  Inbox,
+  Mail,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import Link from "next/link";
 
-type TabType = "overview" | "post-job" | "manage-jobs";
+type TabType = "overview" | "applications" | "post-job" | "manage-jobs";
 
 interface ImageUploadPreview {
   content: string; // base64
@@ -51,6 +55,28 @@ interface ImageUploadPreview {
 
 import { useSearchParams } from "next/navigation";
 
+function getStatusBadgeClass(status: string) {
+  switch (status.toLowerCase()) {
+    case "accepted":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-600";
+    case "rejected":
+      return "border-rose-500/30 bg-rose-500/10 text-rose-600";
+    default:
+      return "border-amber-500/30 bg-amber-500/10 text-amber-600";
+  }
+}
+
+function getApplicantName(application: {
+  applicantName: string | null;
+  applicantEmail: string | null;
+}) {
+  return (
+    application.applicantName ||
+    application.applicantEmail?.split("@")[0] ||
+    "Applicant"
+  );
+}
+
 export default function HrDashboard() {
   const { user, isAuthenticated, loading, refresh } = useAuth();
   const utils = trpc.useUtils();
@@ -60,7 +86,7 @@ export default function HrDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
 
   useEffect(() => {
-    if (tabParam === "overview" || tabParam === "post-job" || tabParam === "manage-jobs") {
+    if (tabParam === "overview" || tabParam === "applications" || tabParam === "post-job" || tabParam === "manage-jobs") {
       setActiveTab(tabParam as TabType);
     } else if (!tabParam) {
       setActiveTab("overview");
@@ -94,6 +120,25 @@ export default function HrDashboard() {
     enabled: isAuthenticated && user?.role === "hr",
   });
 
+  const { data: applications, isLoading: applicationsLoading } = trpc.hr.applications.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "hr",
+  });
+
+  const applicationsByJob = useMemo(() => {
+    const grouped = new Map<number, NonNullable<typeof applications>>();
+    (applications ?? []).forEach(application => {
+      const list = grouped.get(application.jobId) ?? [];
+      list.push(application);
+      grouped.set(application.jobId, list);
+    });
+    return grouped;
+  }, [applications]);
+
+  const pendingApplications = useMemo(
+    () => (applications ?? []).filter(application => application.status === "applied"),
+    [applications]
+  );
+
   // Fetch all applications to show per-job applicant counts
   const { data: allApplications } = trpc.applications.myApplications.useQuery(undefined, {
     enabled: false, // HR can't view others' applications via this endpoint — we show job-level totals from myJobs
@@ -123,6 +168,7 @@ export default function HrDashboard() {
       setUploadedImages([]);
       setActiveTab("manage-jobs");
       utils.hr.myJobs.invalidate();
+      utils.hr.applications.invalidate();
     },
     onError: (err) => {
       toast.error(err.message || "Failed to post job");
@@ -133,9 +179,29 @@ export default function HrDashboard() {
     onSuccess: () => {
       toast.success("Job deleted successfully");
       utils.hr.myJobs.invalidate();
+      utils.hr.applications.invalidate();
     },
     onError: (err) => {
       toast.error(err.message || "Failed to delete job");
+    },
+  });
+
+  const updateApplicationMutation = trpc.hr.updateApplicationStatus.useMutation({
+    onSuccess: (data, variables) => {
+      const verb = variables.status === "accepted" ? "accepted" : "rejected";
+      if (data.emailSent) {
+        toast.success(`Applicant ${verb} and email notification sent successfully!`);
+      } else if ((data as any).emailError) {
+        toast.warning(`Applicant ${verb} successfully, but email failed to send: ${(data as any).emailError}`);
+      } else {
+        toast.info(`Applicant ${verb} successfully (demo mode, no email configured).`);
+      }
+      utils.hr.myJobs.invalidate();
+      utils.hr.applications.invalidate();
+      utils.applications.myApplications.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to update application");
     },
   });
 
@@ -192,6 +258,13 @@ export default function HrDashboard() {
     } finally {
       setJobToDelete(null);
     }
+  };
+
+  const handleApplicationStatus = (
+    applicationId: number,
+    status: "accepted" | "rejected"
+  ) => {
+    updateApplicationMutation.mutate({ applicationId, status });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -386,7 +459,10 @@ export default function HrDashboard() {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setActiveTab("applications")} variant={activeTab === "applications" ? "default" : "outline"} size="sm" className="gap-2">
+                <Users className="h-4 w-4" /> Applications
+              </Button>
               <Button onClick={() => setActiveTab("post-job")} variant={activeTab === "post-job" ? "default" : "outline"} size="sm" className="gap-2">
                 <Plus className="h-4 w-4" /> Post a Job
               </Button>
@@ -400,6 +476,7 @@ export default function HrDashboard() {
           <div className="flex border-b border-border mt-10 gap-6">
             {[
               { id: "overview", label: "Dashboard Overview" },
+              { id: "applications", label: "Applications" },
               { id: "manage-jobs", label: "Manage Listings" },
               { id: "post-job", label: "Post new job" },
             ].map((tab) => {
@@ -427,7 +504,7 @@ export default function HrDashboard() {
         {activeTab === "overview" && (
           <div className="space-y-6">
             {/* Overview Stats */}
-            <div className="grid sm:grid-cols-3 gap-6">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
@@ -440,6 +517,24 @@ export default function HrDashboard() {
                     </span>
                     <span className="text-xs text-muted-foreground">position{(myJobs?.length ?? 0) !== 1 ? "s" : ""}</span>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground font-medium">Applicants</span>
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-1">
+                    <span className="text-3xl font-bold tracking-tight">
+                      {applicationsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : applications?.length ?? 0}
+                    </span>
+                    <span className="text-xs text-muted-foreground">total</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {pendingApplications.length} waiting for review
+                  </p>
                 </CardContent>
               </Card>
 
@@ -484,9 +579,221 @@ export default function HrDashboard() {
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button size="sm" className="font-medium" onClick={() => setActiveTab("post-job")}>Post first position</Button>
                   <Button size="sm" variant="outline" className="font-medium" onClick={() => setActiveTab("manage-jobs")}>Manage posted listings</Button>
+                  <Button size="sm" variant="outline" className="font-medium" onClick={() => setActiveTab("applications")}>Review applicants</Button>
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="border border-border/80">
+              <CardHeader>
+                <CardTitle className="text-lg">Applications by Job</CardTitle>
+                <CardDescription>Applicant volume for each of your active posts.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {jobsLoading || applicationsLoading ? (
+                  <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading application overview...
+                  </div>
+                ) : myJobs && myJobs.length > 0 ? (
+                  myJobs.map(job => {
+                    const jobApplications = applicationsByJob.get(job.id) ?? [];
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => setActiveTab("applications")}
+                        className="flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{job.title}</p>
+                          <p className="text-xs text-muted-foreground">{job.location}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0">
+                          {jobApplications.length} applicant{jobApplications.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="py-6 text-sm text-muted-foreground">No job posts yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "applications" && (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Applicant Review</h2>
+                <p className="text-sm text-muted-foreground">
+                  Review applicants by job and send accept or reject updates by email.
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit">
+                {pendingApplications.length} pending
+              </Badge>
+            </div>
+
+            {applicationsLoading || jobsLoading ? (
+              <div className="text-center py-20">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                <p className="mt-2 text-muted-foreground text-sm">Fetching applicants...</p>
+              </div>
+            ) : myJobs && myJobs.length > 0 ? (
+              <div className="space-y-5">
+                {myJobs.map(job => {
+                  const jobApplications = applicationsByJob.get(job.id) ?? [];
+
+                  return (
+                    <Card key={job.id} className="border border-border">
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <CardTitle className="truncate text-base">{job.title}</CardTitle>
+                            <CardDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin className="h-3.5 w-3.5" />
+                                {job.location}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Briefcase className="h-3.5 w-3.5" />
+                                {job.type}
+                              </span>
+                            </CardDescription>
+                          </div>
+                          <Badge variant="outline">
+                            {jobApplications.length} applicant{jobApplications.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {jobApplications.length > 0 ? (
+                          jobApplications.map(application => {
+                            const applicantName = getApplicantName(application);
+                            const appliedDate = application.appliedAt
+                              ? new Date(application.appliedAt).toLocaleDateString()
+                              : "N/A";
+                            const updating = updateApplicationMutation.isPending;
+
+                            return (
+                              <div
+                                key={application.id}
+                                className="flex flex-col gap-4 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border bg-muted">
+                                    {application.applicantProfileImageUrl ? (
+                                      <img
+                                        src={application.applicantProfileImageUrl}
+                                        alt={applicantName}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-sm font-bold text-muted-foreground">
+                                        {applicantName[0]?.toUpperCase() ?? "A"}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="truncate text-sm font-semibold text-foreground">
+                                        {applicantName}
+                                      </p>
+                                      <Badge variant="outline" className={getStatusBadgeClass(application.status)}>
+                                        {application.status}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                      <span className="inline-flex items-center gap-1">
+                                        <Mail className="h-3.5 w-3.5" />
+                                        {application.applicantEmail ?? "No email"}
+                                      </span>
+                                      <span className="inline-flex items-center gap-1">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        Applied {appliedDate}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex shrink-0 gap-2 sm:justify-end">
+                                   {((application as any).cvUrl) ? (
+                                     <Button
+                                       size="sm"
+                                       variant="outline"
+                                       className="gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                                       asChild
+                                     >
+                                       <a
+                                         href={((application as any).cvUrl)}
+                                         target="_blank"
+                                         rel="noopener noreferrer"
+                                       >
+                                         <FileText className="h-4 w-4" />
+                                         View CV
+                                       </a>
+                                     </Button>
+                                   ) : (
+                                     <Button
+                                       size="sm"
+                                       variant="outline"
+                                       className="gap-1.5"
+                                       disabled
+                                     >
+                                       <FileText className="h-4 w-4" />
+                                       No CV
+                                     </Button>
+                                   )}
+                                  <Button
+                                    size="sm"
+                                    variant={application.status === "accepted" ? "default" : "outline"}
+                                    className="gap-1.5"
+                                    disabled={updating || application.status === "accepted"}
+                                    onClick={() => handleApplicationStatus(application.id, "accepted")}
+                                  >
+                                    {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    disabled={updating || application.status === "rejected"}
+                                    onClick={() => handleApplicationStatus(application.id, "rejected")}
+                                  >
+                                    {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
+                                    Reject
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                            <Inbox className="mx-auto h-8 w-8 text-muted-foreground/45" />
+                            <p className="mt-2 text-sm text-muted-foreground">No applicants for this job yet.</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <Card className="border border-border bg-muted/10">
+                <CardContent className="text-center py-16">
+                  <Briefcase className="mx-auto h-12 w-12 text-muted-foreground/35 mb-4" />
+                  <h3 className="text-lg font-bold text-foreground">No Jobs Posted</h3>
+                  <p className="text-muted-foreground max-w-sm mx-auto text-sm">
+                    Post a job first, then applicants will appear here.
+                  </p>
+                  <Button onClick={() => setActiveTab("post-job")} className="mt-6">Post a New Job</Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
@@ -522,6 +829,9 @@ export default function HrDashboard() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className="text-[10px] uppercase font-medium">{job.type}</Badge>
                           <Badge variant="secondary" className="text-[10px] font-medium">{job.level}</Badge>
+                          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-medium">
+                            {job.applicantCount ?? 0} applicant{(job.applicantCount ?? 0) !== 1 ? "s" : ""}
+                          </Badge>
                         </div>
                         <h3 className="text-lg font-bold text-foreground mt-1 truncate">{job.title}</h3>
                         

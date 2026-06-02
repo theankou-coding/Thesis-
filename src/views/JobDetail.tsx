@@ -6,6 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import {
   Briefcase,
   MapPin,
   Clock,
@@ -195,10 +202,20 @@ export default function JobDetail() {
 
   const skills = job.skills.split(",").map(s => s.trim()).filter(Boolean);
 
-  const companyInfo = getCompanyDetails(job.company);
-  // Get real DB cover image, if available
-  const dbCoverImage = (job as any).images?.find((img: any) => img.isPrimary)?.imageUrl || (job as any).images?.[0]?.imageUrl;
-  const jobImage = dbCoverImage || getJobImage(job.id, job.company, job.title);
+  const hrProfile = (job as any).hrProfile;
+  const companyName = String(hrProfile?.company || job.company);
+  const companyInfo = getCompanyDetails(companyName);
+  const profileImageUrl = String(hrProfile?.profileImageUrl || companyInfo.logoUrl);
+  const dbImages: string[] = ((job as any).images ?? [])
+    .map((img: any) => img.imageUrl)
+    .filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0);
+  const jobImages = Array.from(
+    new Set<string>(
+      dbImages.length > 0
+        ? dbImages
+        : [getJobImage(job.id, companyName, job.title)]
+    )
+  );
 
   const postedDate = job.createdAt
     ? new Date(job.createdAt).toLocaleDateString("en-US", {
@@ -223,33 +240,33 @@ export default function JobDetail() {
       </div>
 
       <div className="container py-8 max-w-5xl">
-        {/* Hero Cover Banner */}
-        <div className="relative mb-6 h-52 md:h-64 rounded-2xl overflow-hidden shadow-lg">
-          <img
-            src={jobImage}
-            alt={job.title}
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-          <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src={companyInfo.logoUrl}
-                alt={companyInfo.name}
-                className="h-12 w-12 rounded-xl object-cover border-2 border-white/30 shadow-md"
-              />
-              <div>
-                <h2 className="text-lg font-bold text-white drop-shadow-sm">{job.title}</h2>
-                <Link
-                  href={`/companies/${encodeURIComponent(job.company)}`}
-                  className="text-sm text-white/80 hover:text-white transition-colors flex items-center gap-1"
-                >
-                  {job.company} <ExternalLink className="h-3 w-3" />
-                </Link>
+        <Carousel
+          opts={{ align: "start", loop: jobImages.length > 1 }}
+          className="mb-6 overflow-hidden rounded-2xl shadow-lg"
+        >
+          <CarouselContent className="-ml-0">
+            {jobImages.map((imageUrl, index) => (
+              <CarouselItem key={imageUrl} className="pl-0">
+                <div className="h-65 bg-muted md:h-80">
+                  <img
+                    src={imageUrl}
+                    alt={`${job.title} image ${index + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          {jobImages.length > 1 && (
+            <>
+              <CarouselPrevious className="left-3 border-white/50 bg-background/85 shadow-md hover:bg-background" />
+              <CarouselNext className="right-3 border-white/50 bg-background/85 shadow-md hover:bg-background" />
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">
+                {jobImages.length} images
               </div>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        </Carousel>
 
         {/* Hero Card */}
         <Card className="mb-6 overflow-hidden border-0 shadow-lg bg-card text-card-foreground">
@@ -257,10 +274,10 @@ export default function JobDetail() {
           <CardContent className="pt-7 pb-6">
             <div className="flex flex-col sm:flex-row sm:items-start gap-5">
               {/* Company Logo */}
-              <Link href={`/companies/${encodeURIComponent(job.company)}`} className="shrink-0">
+              <Link href={`/companies/${encodeURIComponent(companyName)}`} className="shrink-0">
                 <img
-                  src={companyInfo.logoUrl}
-                  alt={companyInfo.name}
+                  src={profileImageUrl}
+                  alt={companyName}
                   className="h-16 w-16 rounded-2xl object-cover shadow-md border border-border hover:ring-2 hover:ring-primary/40 transition-all"
                 />
               </Link>
@@ -283,11 +300,11 @@ export default function JobDetail() {
                   {job.title}
                 </h1>
                 <Link
-                  href={`/companies/${encodeURIComponent(job.company)}`}
+                  href={`/companies/${encodeURIComponent(companyName)}`}
                   className="mt-1 text-base text-muted-foreground font-medium flex items-center gap-1.5 hover:text-primary transition-colors w-fit group/company"
                 >
                   <Building2 className="h-4 w-4 shrink-0" />
-                  {job.company}
+                  {companyName}
                   <ExternalLink className="h-3 w-3 opacity-0 group-hover/company:opacity-100 transition-opacity" />
                 </Link>
 
@@ -352,7 +369,7 @@ export default function JobDetail() {
                   {skills.map(skill => (
                     <span
                       key={skill}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors dark:bg-primary/10 dark:text-primary-foreground/90"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors dark:border-primary/35 dark:bg-primary/20 dark:text-white"
                     >
                       <CheckCircle2 className="h-3 w-3" />
                       {skill}
@@ -363,22 +380,24 @@ export default function JobDetail() {
             </Card>
 
             {/* Why apply callout */}
-            <div className="rounded-xl border border-accent/30 bg-accent/5 p-5">
-              <h3 className="font-semibold text-foreground mb-2">Ready to apply?</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Upload your CV and let our AI match your profile to this role instantly.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="default" className="gap-2" onClick={() => handleApply("/upload-cv")}>
-                  <Send className="h-4 w-4" />
-                  {isApplied ? "Applied (Go to Upload)" : "Apply with CV Upload"}
-                </Button>
-                <Button variant="outline" className="gap-2" onClick={() => handleApply("/create-cv")}>
-                  <Briefcase className="h-4 w-4" />
-                  Build a Tailored CV
-                </Button>
+            {user?.role !== "hr" && (
+              <div className="rounded-xl border border-accent/30 bg-accent/5 p-5">
+                <h3 className="font-semibold text-foreground mb-2">Ready to apply?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload your CV and let our AI match your profile to this role instantly.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="default" className="gap-2" onClick={() => handleApply("/upload-cv")}>
+                    <Send className="h-4 w-4" />
+                    {isApplied ? "Applied (Go to Upload)" : "Apply with CV Upload"}
+                  </Button>
+                  <Button variant="outline" className="gap-2" onClick={() => handleApply("/create-cv")}>
+                    <Briefcase className="h-4 w-4" />
+                    Build a Tailored CV
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Right – quick info sidebar */}
@@ -388,12 +407,18 @@ export default function JobDetail() {
               <CardContent className="pt-6 pb-5 text-center">
                 <p className="text-sm font-medium opacity-90 mb-1">Salary Range</p>
                 <p className="text-2xl font-bold mb-4">{job.salary}</p>
-                <Button
-                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
-                  onClick={() => handleApply("/upload-cv")}
-                >
-                  {isApplied ? "Applied Successfully" : "Quick Apply"}
-                </Button>
+                {user?.role !== "hr" ? (
+                  <Button
+                    className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
+                    onClick={() => handleApply("/upload-cv")}
+                  >
+                    {isApplied ? "Applied Successfully" : "Quick Apply"}
+                  </Button>
+                ) : (
+                  <p className="text-xs opacity-75 font-medium mt-2">
+                    Recruiter Account
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -402,7 +427,7 @@ export default function JobDetail() {
               <CardContent className="pt-6 space-y-4">
                 <h3 className="font-semibold text-foreground">Overview</h3>
                 {[
-                  { icon: Building2, label: "Company", value: job.company, isLink: true },
+                  { icon: Building2, label: "Company", value: companyName, isLink: true },
                   { icon: MapPin, label: "Location", value: job.location },
                   { icon: Briefcase, label: "Type", value: job.type },
                   { icon: Clock, label: "Level", value: job.level },

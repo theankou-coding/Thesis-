@@ -11,7 +11,6 @@ import {
   LogOut,
   FileText,
   Upload,
-  Briefcase,
   Bookmark,
   ChevronDown,
   History,
@@ -36,8 +35,7 @@ import {
 const mainNav = [
   { href: "/jobs", label: "Find Jobs" },
   { href: "/create-cv", label: "Create CV" },
-  { href: "/upload-cv", label: "Upload CV" },
-  { href: "/my-cvs", label: "My CVs" },
+  { href: "/upload-cv", label: "CV Manager" },
   { href: "/about", label: "About Us" },
   { href: "/contact", label: "Contact Us" },
 ];
@@ -55,7 +53,7 @@ const subNav = [
   { href: "/jobs", label: "Jobs You Might Like" },
   { href: "/history?tab=applied", label: "Applied Jobs" },
   { href: "/history?tab=saved", label: "Saved Jobs" },
-  { href: "/upload-cv", label: "AI-Matching Jobs" },
+  { href: "/upload-cv", label: "CV Manager" },
 ];
 
 const hrSubNav = [
@@ -76,8 +74,9 @@ export function Header() {
   }, []);
 
   const nameParts = user?.name ? user.name.split(":::") : [];
-  const displayName = nameParts[0] || user?.name || user?.email?.split("@")[0] || "";
-  const avatarUrl = nameParts[1] || "";
+  const displayName =
+    nameParts[0] || user?.name || user?.email?.split("@")[0] || "";
+  const avatarUrl = user?.profileImageUrl || nameParts[1] || "";
 
   const isHr = mounted && isAuthenticated && user?.role === "hr";
   const isAdmin = mounted && isAuthenticated && user?.role === "admin";
@@ -91,7 +90,7 @@ export function Header() {
       : isUser
         ? [
             ...mainNav.filter(
-              (item) => item.href !== "/about" && item.href !== "/contact"
+              item => item.href !== "/about" && item.href !== "/contact"
             ),
             { href: "/profile", label: "Profile" },
             { href: "/about", label: "About Us" },
@@ -113,7 +112,7 @@ export function Header() {
 
           {/* Center nav links */}
           <nav className="hidden items-center gap-1 lg:flex">
-            {navItems.map((link) => (
+            {navItems.map(link => (
               <NavLink key={link.href} href={link.href} label={link.label} />
             ))}
           </nav>
@@ -173,13 +172,22 @@ export function Header() {
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-muted/40 border-border hover:bg-muted transition-all cursor-pointer max-w-[220px] select-none hover:shadow-sm">
                       <div className="h-6 w-6 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0 ring-1 ring-border">
                         {avatarUrl ? (
-                          <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                          <img
+                            src={avatarUrl}
+                            alt={displayName}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : displayName ? (
+                          displayName[0].toUpperCase()
                         ) : (
-                          displayName ? displayName[0].toUpperCase() : <User className="h-3 w-3" />
+                          <User className="h-3 w-3" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="text-sm font-medium text-foreground truncate max-w-[100px] block" title={displayName}>
+                        <span
+                          className="text-sm font-medium text-foreground truncate max-w-[100px] block"
+                          title={displayName}
+                        >
                           {displayName}
                         </span>
                       </div>
@@ -197,11 +205,16 @@ export function Header() {
                     </div>
                   </DropdownMenuTrigger>
 
-                  <DropdownMenuContent align="end" className="w-60 mt-1 border border-border bg-popover p-1.5 shadow-lg rounded-xl">
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-60 mt-1 border border-border bg-popover p-1.5 shadow-lg rounded-xl"
+                  >
                     <DropdownMenuLabel className="px-2.5 py-2">
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-foreground truncate leading-none">{displayName}</p>
+                          <p className="text-sm font-bold text-foreground truncate leading-none">
+                            {displayName}
+                          </p>
                           {isHr && (
                             <span className="text-[9px] font-bold uppercase tracking-wider bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full px-1.5 py-0.5 shrink-0">
                               HR
@@ -224,25 +237,37 @@ export function Header() {
                     {isHr ? (
                       <DropdownMenuGroup>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/hr" className="flex w-full items-center gap-2 px-2 py-1.5 font-semibold text-violet-600 dark:text-violet-400">
+                          <Link
+                            href="/hr"
+                            className="flex w-full items-center gap-2 px-2 py-1.5 font-semibold text-violet-600 dark:text-violet-400"
+                          >
                             <LayoutDashboard className="h-4 w-4" />
                             <span>HR Dashboard</span>
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/hr?tab=post-job" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/hr?tab=post-job"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <PlusSquare className="h-4 w-4 text-muted-foreground" />
                             <span>Post a Job</span>
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/hr?tab=manage-jobs" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/hr?tab=manage-jobs"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <ListChecks className="h-4 w-4 text-muted-foreground" />
                             <span>Manage Listings</span>
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/profile" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/profile"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span>My Profile</span>
                           </Link>
@@ -253,34 +278,40 @@ export function Header() {
                       <DropdownMenuGroup>
                         {isAdmin && (
                           <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link href="/admin" className="flex w-full items-center gap-2 px-2 py-1.5 font-semibold text-amber-600 dark:text-amber-400">
+                            <Link
+                              href="/admin"
+                              className="flex w-full items-center gap-2 px-2 py-1.5 font-semibold text-amber-600 dark:text-amber-400"
+                            >
                               <ShieldCheck className="h-4 w-4" />
                               <span>Admin Panel</span>
                             </Link>
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/profile" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/profile"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span>My Profile</span>
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/create-cv" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/create-cv"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <FileText className="h-4 w-4 text-muted-foreground" />
                             <span>Create CV</span>
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/upload-cv" className="flex w-full items-center gap-2 px-2 py-1.5">
+                          <Link
+                            href="/upload-cv"
+                            className="flex w-full items-center gap-2 px-2 py-1.5"
+                          >
                             <Upload className="h-4 w-4 text-muted-foreground" />
-                            <span>Upload CV</span>
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link href="/my-cvs" className="flex w-full items-center gap-2 px-2 py-1.5">
-                            <Briefcase className="h-4 w-4 text-muted-foreground" />
-                            <span>My CVs</span>
+                            <span>CV Manager</span>
                           </Link>
                         </DropdownMenuItem>
                       </DropdownMenuGroup>
@@ -292,13 +323,19 @@ export function Header() {
                         <DropdownMenuSeparator className="my-1 bg-border/60" />
                         <DropdownMenuGroup>
                           <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link href="/history?tab=applied" className="flex w-full items-center gap-2 px-2 py-1.5">
+                            <Link
+                              href="/history?tab=applied"
+                              className="flex w-full items-center gap-2 px-2 py-1.5"
+                            >
                               <History className="h-4 w-4 text-muted-foreground" />
                               <span>Applied Jobs</span>
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild className="cursor-pointer">
-                            <Link href="/history?tab=saved" className="flex w-full items-center gap-2 px-2 py-1.5">
+                            <Link
+                              href="/history?tab=saved"
+                              className="flex w-full items-center gap-2 px-2 py-1.5"
+                            >
                               <Bookmark className="h-4 w-4 text-muted-foreground" />
                               <span>Saved Jobs</span>
                             </Link>
@@ -321,10 +358,15 @@ export function Header() {
             ) : (
               <>
                 <Link href="/login">
-                  <span className="text-sm font-medium text-foreground/70 hover:text-primary cursor-pointer px-3 py-2">Login</span>
+                  <span className="text-sm font-medium text-foreground/70 hover:text-primary cursor-pointer px-3 py-2">
+                    Login
+                  </span>
                 </Link>
                 <Link href="/register">
-                  <Button size="sm" className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-6 font-semibold">
+                  <Button
+                    size="sm"
+                    className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-6 font-semibold"
+                  >
                     Sign Up
                   </Button>
                 </Link>
@@ -336,12 +378,22 @@ export function Header() {
           <div className="flex items-center gap-2 lg:hidden">
             {mounted && isAuthenticated && (
               <Link href={isHr ? "/hr" : "/profile"}>
-                <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0 bg-muted/40 border border-border relative">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full h-9 w-9 p-0 bg-muted/40 border border-border relative"
+                >
                   <div className="h-6 w-6 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center font-bold text-xs ring-1 ring-border">
                     {avatarUrl ? (
-                      <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : displayName ? (
+                      displayName[0].toUpperCase()
                     ) : (
-                      displayName ? displayName[0].toUpperCase() : <User className="h-3 w-3" />
+                      <User className="h-3 w-3" />
                     )}
                   </div>
                   {isHr && (
@@ -351,7 +403,11 @@ export function Header() {
               </Link>
             )}
             <button className="p-2" onClick={() => setMobileOpen(!mobileOpen)}>
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
@@ -361,8 +417,13 @@ export function Header() {
       {mobileOpen && (
         <div className="border-b border-border bg-card p-4 lg:hidden">
           <nav className="flex flex-col gap-2">
-            {navItems.map((link) => (
-              <MobileNavLink key={link.href} href={link.href} label={link.label} onClose={() => setMobileOpen(false)} />
+            {navItems.map(link => (
+              <MobileNavLink
+                key={link.href}
+                href={link.href}
+                label={link.label}
+                onClose={() => setMobileOpen(false)}
+              />
             ))}
 
             {/* Quick access sub-nav */}
@@ -370,9 +431,15 @@ export function Header() {
               <p className="px-4 text-xs font-semibold uppercase text-muted-foreground mb-2">
                 {isHr ? "Recruiter Tools" : "Quick Access"}
               </p>
-              {quickAccessNav.map((link) => (
-                <Link key={link.label} href={link.href} onClick={() => setMobileOpen(false)}>
-                  <span className="block px-4 py-1.5 text-sm text-foreground/60 hover:text-foreground transition-colors">{link.label}</span>
+              {quickAccessNav.map(link => (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <span className="block px-4 py-1.5 text-sm text-foreground/60 hover:text-foreground transition-colors">
+                    {link.label}
+                  </span>
                 </Link>
               ))}
             </div>
@@ -381,7 +448,12 @@ export function Header() {
               <div className="flex items-center justify-between px-4 mb-4">
                 <span className="text-sm text-muted-foreground">Theme</span>
                 {toggleTheme && (
-                  <Button variant="outline" size="sm" onClick={toggleTheme} className="gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleTheme}
+                    className="gap-2"
+                  >
                     {!mounted ? (
                       <>
                         <span className="h-4 w-4" />
@@ -389,7 +461,11 @@ export function Header() {
                       </>
                     ) : (
                       <>
-                        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                        {theme === "dark" ? (
+                          <Sun className="h-4 w-4" />
+                        ) : (
+                          <Moon className="h-4 w-4" />
+                        )}
                         {theme === "dark" ? "Light" : "Dark"} Mode
                       </>
                     )}
@@ -403,14 +479,22 @@ export function Header() {
                   <div className="flex items-center gap-3 px-4 py-2">
                     <div className="h-10 w-10 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0 ring-2 ring-border">
                       {avatarUrl ? (
-                        <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                        <img
+                          src={avatarUrl}
+                          alt={displayName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : displayName ? (
+                        displayName[0].toUpperCase()
                       ) : (
-                        displayName ? displayName[0].toUpperCase() : <User className="h-4 w-4" />
+                        <User className="h-4 w-4" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-foreground truncate leading-none">{displayName}</p>
+                        <p className="text-sm font-bold text-foreground truncate leading-none">
+                          {displayName}
+                        </p>
                         {isHr && (
                           <span className="text-[9px] font-bold uppercase tracking-wider bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full px-1.5 py-0.5 shrink-0">
                             HR
@@ -432,21 +516,56 @@ export function Header() {
                   <div className="grid grid-cols-2 gap-2 px-2">
                     {(isHr
                       ? [
-                          { href: "/hr", label: "Dashboard", icon: LayoutDashboard },
-                          { href: "/hr?tab=post-job", label: "Post a Job", icon: PlusSquare },
-                          { href: "/hr?tab=manage-jobs", label: "Manage Jobs", icon: ListChecks },
+                          {
+                            href: "/hr",
+                            label: "Dashboard",
+                            icon: LayoutDashboard,
+                          },
+                          {
+                            href: "/hr?tab=post-job",
+                            label: "Post a Job",
+                            icon: PlusSquare,
+                          },
+                          {
+                            href: "/hr?tab=manage-jobs",
+                            label: "Manage Jobs",
+                            icon: ListChecks,
+                          },
                           { href: "/profile", label: "My Profile", icon: User },
                         ]
                       : [
-                          ...(isAdmin ? [{ href: "/admin", label: "Admin Panel", icon: ShieldCheck }] : []),
+                          ...(isAdmin
+                            ? [
+                                {
+                                  href: "/admin",
+                                  label: "Admin Panel",
+                                  icon: ShieldCheck,
+                                },
+                              ]
+                            : []),
                           { href: "/profile", label: "My Profile", icon: User },
-                          { href: "/create-cv", label: "Create CV", icon: FileText },
-                          { href: "/upload-cv", label: "Upload CV", icon: Upload },
-                          { href: "/my-cvs", label: "My CVs", icon: Briefcase },
-                          { href: "/history?tab=applied", label: "Applied Jobs", icon: History },
-                          { href: "/history?tab=saved", label: "Saved Jobs", icon: Bookmark },
+                          {
+                            href: "/create-cv",
+                            label: "Create CV",
+                            icon: FileText,
+                          },
+                          {
+                            href: "/upload-cv",
+                            label: "CV Manager",
+                            icon: Upload,
+                          },
+                          {
+                            href: "/history?tab=applied",
+                            label: "Applied Jobs",
+                            icon: History,
+                          },
+                          {
+                            href: "/history?tab=saved",
+                            label: "Saved Jobs",
+                            icon: Bookmark,
+                          },
                         ]
-                    ).map((item) => {
+                    ).map(item => {
                       const Icon = item.icon;
                       return (
                         <Link
@@ -456,7 +575,9 @@ export function Header() {
                           className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 border-border/50 hover:bg-muted/80 transition-colors"
                         >
                           <Icon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-xs font-semibold text-foreground">{item.label}</span>
+                          <span className="text-xs font-semibold text-foreground">
+                            {item.label}
+                          </span>
                         </Link>
                       );
                     })}
@@ -479,11 +600,23 @@ export function Header() {
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="flex-1">
-                    <Button variant="outline" size="sm" className="w-full">Login</Button>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex-1"
+                  >
+                    <Button variant="outline" size="sm" className="w-full">
+                      Login
+                    </Button>
                   </Link>
-                  <Link href="/register" onClick={() => setMobileOpen(false)} className="flex-1">
-                    <Button size="sm" className="w-full">Sign Up</Button>
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex-1"
+                  >
+                    <Button size="sm" className="w-full">
+                      Sign Up
+                    </Button>
                   </Link>
                 </div>
               )}
@@ -502,7 +635,9 @@ function NavLink({ href, label }: { href: string; label: string }) {
     <Link href={href}>
       <span
         className={`px-4 py-2 text-sm font-medium transition-colors rounded-md ${
-          isActive ? "text-primary font-semibold bg-primary/5" : "text-foreground/70 hover:text-primary"
+          isActive
+            ? "text-primary font-semibold bg-primary/5"
+            : "text-foreground/70 hover:text-primary"
         }`}
       >
         {label}
@@ -512,7 +647,15 @@ function NavLink({ href, label }: { href: string; label: string }) {
 }
 
 /* ── Mobile nav link with ?tab= aware active state ── */
-function MobileNavLink({ href, label, onClose }: { href: string; label: string; onClose: () => void }) {
+function MobileNavLink({
+  href,
+  label,
+  onClose,
+}: {
+  href: string;
+  label: string;
+  onClose: () => void;
+}) {
   const isActive = useIsActive(href);
   return (
     <Link href={href} onClick={onClose}>

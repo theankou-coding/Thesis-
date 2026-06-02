@@ -162,7 +162,7 @@ export default function History() {
                 </Button>
               </Link>
               <Link href="/upload-cv">
-                <Button size="sm">Upload CV</Button>
+                <Button size="sm">CV Manager</Button>
               </Link>
             </div>
           </div>
@@ -376,7 +376,7 @@ export default function History() {
                   No CVs uploaded yet. Upload your first CV to get started with AI job matching.
                 </p>
                 <Link href="/upload-cv">
-                  <Button className="mt-6">Upload CV</Button>
+                  <Button className="mt-6">CV Manager</Button>
                 </Link>
               </CardContent>
             </Card>

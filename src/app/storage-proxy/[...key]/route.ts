@@ -5,6 +5,14 @@ type Params = {
   params: Promise<{ key: string[] }>;
 };
 
+function decodePathSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 /**
  * GET /storage-proxy/[...key]
  *
@@ -13,7 +21,7 @@ type Params = {
  */
 export async function GET(_request: NextRequest, { params }: Params) {
   const { key } = await params;
-  const relKey = key.join("/");
+  const relKey = key.map(decodePathSegment).join("/");
 
   try {
     const signedUrl = await storageGetSignedUrl(relKey, 3600);

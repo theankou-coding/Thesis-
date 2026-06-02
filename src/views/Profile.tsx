@@ -23,7 +23,6 @@ import {
   LogOut,
   ChevronRight,
   Clock,
-  Star,
 } from "lucide-react";
 
 export default function Profile() {
@@ -164,9 +163,8 @@ export default function Profile() {
   };
 
   const quickLinks = [
-    { href: "/my-cvs", icon: FileText, label: "My Uploaded CVs", count: cvLoading ? "…" : String(cvUploads?.length ?? 0) },
     { href: "/history", icon: Briefcase, label: "Application History", count: null },
-    { href: "/upload-cv", icon: Star, label: "AI Job Matching", count: null },
+    { href: "/upload-cv", icon: FileText, label: "CV Manager", count: cvLoading ? "…" : String(cvUploads?.length ?? 0) },
   ];
 
   return (

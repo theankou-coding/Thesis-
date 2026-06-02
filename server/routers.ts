@@ -1,5 +1,10 @@
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import {
+  adminProcedure,
+  publicProcedure,
+  protectedProcedure,
+  router,
+} from "./_core/trpc";
 import { expireSessionCookie, setSessionCookie } from "./_core/context";
 import { z } from "zod";
 import {
@@ -8,29 +13,51 @@ import {
   getJobById,
   createCvUpload,
   getUserCvUploads,
+  getCvUploadById,
+  deleteCvUpload,
   getSupabase,
   upsertUser,
   getUserByOpenId,
+  getUserById,
   getJobImages,
   addJobImages,
   upsertHrUser,
   getHrUserByUserId,
+  getHrUserByCompany,
+  getSupabaseAdmin,
   createJobApplication,
   deleteJobApplication,
   getUserApplications,
+  getHrJobApplications,
+  getJobApplicationById,
+  updateJobApplicationStatus,
   createSavedJob,
   deleteSavedJob,
   getUserSavedJobs,
   createJob,
   deleteJob,
+  updateJob,
+  replaceJobImages,
   updateUserRole,
+  updateAdminUser,
+  deleteUser,
   getAdminDashboardSnapshot,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { storagePut, storagePutCv } from "./storage";
+import { sendApplicationStatusEmail } from "./email";
 import { sdk } from "./_core/sdk";
 import { ONE_YEAR_MS } from "@shared/const";
 import { ENV } from "./_core/env";
+
+const SUPABASE_SERVICE_ROLE_REQUIRED_ERROR =
+  "SUPABASE_SERVICE_ROLE_KEY is required to register HR accounts while Supabase RLS is enabled.";
+
+function requireSupabaseAdminClient() {
+  if (!getSupabaseAdmin()) {
+    throw new Error(SUPABASE_SERVICE_ROLE_REQUIRED_ERROR);
+  }
+}
 
 // Helper: normalize text for keyword matching
 function normalize(value: string) {
@@ -38,17 +65,31 @@ function normalize(value: string) {
 }
 
 // Helper: keyword-based recommendation scoring
-function scoreJobs(cvText: string, jobList: Awaited<ReturnType<typeof getAllJobs>>) {
+function scoreJobs(
+  cvText: string,
+  jobList: Awaited<ReturnType<typeof getAllJobs>>
+) {
   const text = normalize(cvText);
-  return jobList.map((job) => {
-    const skills = job.skills.split(",").map(s => s.trim());
-    const matchedSkills = skills.filter((skill) => text.includes(normalize(skill)));
-    const missingSkills = skills.filter((skill) => !text.includes(normalize(skill))).slice(0, 5);
-    const baseScore = matchedSkills.length / skills.length;
-    const titleBoost = normalize(job.title).split(" ").filter(w => w.length > 3).some(w => text.includes(w)) ? 0.12 : 0;
-    const score = Math.min(98, Math.round((baseScore + titleBoost) * 100));
-    return { ...job, score, matchedSkills, missingSkills };
-  }).sort((a, b) => b.score - a.score);
+  return jobList
+    .map(job => {
+      const skills = job.skills.split(",").map(s => s.trim());
+      const matchedSkills = skills.filter(skill =>
+        text.includes(normalize(skill))
+      );
+      const missingSkills = skills
+        .filter(skill => !text.includes(normalize(skill)))
+        .slice(0, 5);
+      const baseScore = matchedSkills.length / skills.length;
+      const titleBoost = normalize(job.title)
+        .split(" ")
+        .filter(w => w.length > 3)
+        .some(w => text.includes(w))
+        ? 0.12
+        : 0;
+      const score = Math.min(98, Math.round((baseScore + titleBoost) * 100));
+      return { ...job, score, matchedSkills, missingSkills };
+    })
+    .sort((a, b) => b.score - a.score);
 }
 
 export const appRouter = router({
@@ -83,6 +124,10 @@ export const appRouter = router({
           throw new Error("Company name is required for HR accounts");
         }
 
+        if (input.role === "hr") {
+          requireSupabaseAdminClient();
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: input.email,
           password: input.password,
@@ -104,12 +149,15 @@ export const appRouter = router({
         // Upload profile image to S3
         const buffer = Buffer.from(input.profileImageContent, "base64");
         const fileKey = `profile-images/${data.user.id}/${Date.now()}-${input.profileImageName}`;
-        const { url: imageUrl } = await storagePut(fileKey, buffer, input.profileImageMime);
+        const { url: imageUrl } = await storagePut(
+          fileKey,
+          buffer,
+          input.profileImageMime
+        );
 
-        // Upsert the user into the local database with Name:::AvatarUrl and selected role
         await upsertUser({
           openId: data.user.id,
-          name: `${input.name}:::${imageUrl}`,
+          name: input.name,
           email: input.email,
           loginMethod: "email",
           lastSignedIn: null, // User has not signed in yet (must confirm email first)
@@ -121,7 +169,9 @@ export const appRouter = router({
         if (input.role === "hr") {
           const dbUser = await getUserByOpenId(data.user.id);
           if (!dbUser) {
-            throw new Error("Failed to retrieve created user record for HR registration");
+            throw new Error(
+              "Failed to retrieve created user record for HR registration"
+            );
           }
           await upsertHrUser({
             userId: dbUser.id,
@@ -144,29 +194,34 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         let avatarUrl = ctx.user.profileImageUrl || "";
-        
-        if (!avatarUrl && ctx.user.name && ctx.user.name.includes(":::")) {
-          avatarUrl = ctx.user.name.split(":::")[1] || "";
-        }
-        
-        if (input.profileImageContent && input.profileImageName && input.profileImageMime) {
+
+        if (
+          input.profileImageContent &&
+          input.profileImageName &&
+          input.profileImageMime
+        ) {
           const buffer = Buffer.from(input.profileImageContent, "base64");
           const fileKey = `profile-images/${ctx.user.openId}/${Date.now()}-${input.profileImageName}`;
-          const { url } = await storagePut(fileKey, buffer, input.profileImageMime);
+          const { url } = await storagePut(
+            fileKey,
+            buffer,
+            input.profileImageMime
+          );
           avatarUrl = url;
         }
-        
-        const fullName = `${input.name}:::${avatarUrl}`;
+
         await upsertUser({
           openId: ctx.user.openId,
-          name: fullName,
+          name: input.name,
           email: ctx.user.email,
           loginMethod: ctx.user.loginMethod,
-          lastSignedIn: ctx.user.lastSignedIn ? new Date(ctx.user.lastSignedIn) : null,
+          lastSignedIn: ctx.user.lastSignedIn
+            ? new Date(ctx.user.lastSignedIn)
+            : null,
           profileImageUrl: avatarUrl,
         });
-        
-        return { success: true, name: fullName };
+
+        return { success: true, name: input.name };
       }),
     login: publicProcedure
       .input(
@@ -196,7 +251,10 @@ export const appRouter = router({
 
         // Check if user exists in local database, otherwise upsert
         let dbUser = await getUserByOpenId(data.user.id);
-        const name = dbUser?.name || data.user.user_metadata?.name || input.email.split("@")[0];
+        const name =
+          dbUser?.name ||
+          data.user.user_metadata?.name ||
+          input.email.split("@")[0];
 
         await upsertUser({
           openId: data.user.id,
@@ -213,12 +271,69 @@ export const appRouter = router({
 
         setSessionCookie(ctx, sessionToken);
 
-        return { success: true, user: { email: data.user.email, id: data.user.id } };
+        return {
+          success: true,
+          user: { email: data.user.email, id: data.user.id },
+        };
       }),
   }),
 
   admin: router({
     dashboard: adminProcedure.query(() => getAdminDashboardSnapshot()),
+    updateUser: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          name: z.string().nullable(),
+          email: z.string().email().nullable(),
+          role: z.enum(["user", "hr", "admin"]),
+          profileImageUrl: z.string().trim().nullable(),
+        })
+      )
+      .mutation(({ input }) =>
+        updateAdminUser(input.id, {
+          name: input.name,
+          email: input.email,
+          role: input.role,
+          profileImageUrl: input.profileImageUrl,
+        })
+      ),
+    deleteUser: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(({ input }) => deleteUser(input.id)),
+    updateJob: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          title: z.string().min(1),
+          company: z.string().min(1),
+          location: z.string().min(1),
+          type: z.string().min(1),
+          level: z.string().min(1),
+          description: z.string().min(1),
+          skills: z.string().min(1),
+          salary: z.string().min(1),
+          imageUrls: z.array(z.string().trim().min(1)).default([]),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const job = await updateJob(input.id, {
+          title: input.title,
+          company: input.company,
+          location: input.location,
+          type: input.type,
+          level: input.level,
+          description: input.description,
+          skills: input.skills,
+          salary: input.salary,
+        });
+
+        await replaceJobImages(input.id, input.imageUrls);
+        return job;
+      }),
+    deleteJob: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(({ input }) => deleteJob(input.id)),
   }),
 
   jobs: router({
@@ -226,11 +341,13 @@ export const appRouter = router({
       .input(z.object({ search: z.string().optional() }).optional())
       .query(async ({ input }) => {
         const results = await getJobs(input?.search);
-        const jobsWithImages = await Promise.all(results.map(async (job) => {
-          const images = await getJobImages(job.id);
-          const primaryImage = images.find(img => img.isPrimary) || images[0];
-          return { ...job, coverImage: primaryImage?.imageUrl || null };
-        }));
+        const jobsWithImages = await Promise.all(
+          results.map(async job => {
+            const images = await getJobImages(job.id);
+            const primaryImage = images.find(img => img.isPrimary) || images[0];
+            return { ...job, coverImage: primaryImage?.imageUrl || null };
+          })
+        );
         return { jobs: jobsWithImages, total: jobsWithImages.length };
       }),
     getById: publicProcedure
@@ -239,7 +356,21 @@ export const appRouter = router({
         const job = await getJobById(input.id);
         if (!job) return null;
         const images = await getJobImages(input.id);
-        return { ...job, images };
+        const hrProfile = await getHrUserByCompany(job.company);
+        const hrUser = hrProfile ? await getUserById(hrProfile.userId) : null;
+
+        return {
+          ...job,
+          images,
+          hrProfile: hrProfile
+            ? {
+                ...hrProfile,
+                userName: hrUser?.name ?? null,
+                userEmail: hrUser?.email ?? null,
+                profileImageUrl: hrUser?.profileImageUrl ?? null,
+              }
+            : null,
+        };
       }),
   }),
 
@@ -278,19 +409,30 @@ export const appRouter = router({
 
         try {
           const formData = new FormData();
-          const blob = new Blob([new Uint8Array(fileContentBuffer)], { type: mimeType });
+          const blob = new Blob([new Uint8Array(fileContentBuffer)], {
+            type: mimeType,
+          });
           formData.append("file", blob, fileName);
 
-          console.log(`[FastAPI Proxy] Sending CV to matching engine at ${ENV.recommendationApiUrl}/api/v1/match_cv...`);
-          const response = await fetch(`${ENV.recommendationApiUrl}/api/v1/match_cv`, {
-            method: "POST",
-            body: formData,
-          });
+          console.log(
+            `[FastAPI Proxy] Sending CV to matching engine at ${ENV.recommendationApiUrl}/api/v1/match_cv...`
+          );
+          const response = await fetch(
+            `${ENV.recommendationApiUrl}/api/v1/match_cv`,
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
 
           if (!response.ok) {
             const errText = await response.text();
-            console.error(`[FastAPI Proxy] Matching engine returned error: ${response.status} - ${errText}`);
-            throw new Error(`Matching service error: ${errText || response.statusText}`);
+            console.error(
+              `[FastAPI Proxy] Matching engine returned error: ${response.status} - ${errText}`
+            );
+            throw new Error(
+              `Matching service error: ${errText || response.statusText}`
+            );
           }
 
           const result = (await response.json()) as {
@@ -311,15 +453,19 @@ export const appRouter = router({
 
           // Map matches to database jobs
           const recommendations = result.matches
-            .map((match) => {
-              const dbJob = jobList.find((j) => j.id === parseInt(match.job_id));
+            .map(match => {
+              const dbJob = jobList.find(j => j.id === parseInt(match.job_id));
               if (!dbJob) return null;
-              
+
               const score = parseFloat(match.match_score.replace("%", ""));
-              const missingSkills = match.mismatch_analysis.missing_skills_detected;
-              const allSkills = dbJob.skills.split(",").map((s) => s.trim());
+              const missingSkills =
+                match.mismatch_analysis.missing_skills_detected;
+              const allSkills = dbJob.skills.split(",").map(s => s.trim());
               const matchedSkills = allSkills.filter(
-                (skill) => !missingSkills.some((m) => m.toLowerCase() === skill.toLowerCase())
+                skill =>
+                  !missingSkills.some(
+                    m => m.toLowerCase() === skill.toLowerCase()
+                  )
               );
 
               return {
@@ -334,7 +480,7 @@ export const appRouter = router({
 
           // Get detected skills from matching jobs
           const detectedSkills = Array.from(
-            new Set(recommendations.flatMap((rec) => rec.matchedSkills))
+            new Set(recommendations.flatMap(rec => rec.matchedSkills))
           ).slice(0, 20);
 
           return {
@@ -343,24 +489,37 @@ export const appRouter = router({
             analyzedAt: new Date().toISOString(),
           };
         } catch (error: any) {
-          console.error("[FastAPI Proxy] Recommendation API call failed, falling back to local search:", error);
-          
+          console.error(
+            "[FastAPI Proxy] Recommendation API call failed, falling back to local search:",
+            error
+          );
+
           let cvTextFallback = input.cvText || "";
-          if (input.file && ["txt", "md", "csv"].some(ext => input.file!.fileName.toLowerCase().endsWith(ext))) {
-             cvTextFallback = fileContentBuffer.toString("utf-8");
+          if (
+            input.file &&
+            ["txt", "md", "csv"].some(ext =>
+              input.file!.fileName.toLowerCase().endsWith(ext)
+            )
+          ) {
+            cvTextFallback = fileContentBuffer.toString("utf-8");
           }
-          
+
           const recommendations = scoreJobs(cvTextFallback, jobList);
           const detectedSkills = Array.from(
             new Set(
               jobList
-                .flatMap((j) => j.skills.split(",").map((s) => s.trim()))
-                .filter((skill) => normalize(cvTextFallback).includes(normalize(skill)))
+                .flatMap(j => j.skills.split(",").map(s => s.trim()))
+                .filter(skill =>
+                  normalize(cvTextFallback).includes(normalize(skill))
+                )
             )
           ).slice(0, 20);
 
           return {
-            recommendations: recommendations.map(r => ({ ...r, mismatchReasons: [] as string[] })),
+            recommendations: recommendations.map(r => ({
+              ...r,
+              mismatchReasons: [] as string[],
+            })),
             detectedSkills,
             analyzedAt: new Date().toISOString(),
             fallback: true,
@@ -373,7 +532,12 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const jobList = await getAllJobs();
         const topJobs = scoreJobs(input.cvText, jobList).slice(0, 4);
-        const jobContext = topJobs.map(j => `- ${j.title} at ${j.company} (${j.score}% match, matched: ${j.matchedSkills.join(", ")})`).join("\n");
+        const jobContext = topJobs
+          .map(
+            j =>
+              `- ${j.title} at ${j.company} (${j.score}% match, matched: ${j.matchedSkills.join(", ")})`
+          )
+          .join("\n");
 
         const response = await invokeLLM({
           messages: [
@@ -387,9 +551,9 @@ export const appRouter = router({
 Jobs to evaluate:
 ${jobContext}
 
-Return ONLY valid JSON, no markdown fences.`
+Return ONLY valid JSON, no markdown fences.`,
             },
-            { role: "user", content: input.cvText }
+            { role: "user", content: input.cvText },
           ],
           response_format: {
             type: "json_schema",
@@ -399,8 +563,14 @@ Return ONLY valid JSON, no markdown fences.`
               schema: {
                 type: "object",
                 properties: {
-                  skillSummary: { type: "string", description: "Summary of candidate skills" },
-                  careerProfile: { type: "string", description: "Career trajectory analysis" },
+                  skillSummary: {
+                    type: "string",
+                    description: "Summary of candidate skills",
+                  },
+                  careerProfile: {
+                    type: "string",
+                    description: "Career trajectory analysis",
+                  },
                   recommendations: {
                     type: "array",
                     items: {
@@ -408,18 +578,18 @@ Return ONLY valid JSON, no markdown fences.`
                       properties: {
                         jobTitle: { type: "string" },
                         company: { type: "string" },
-                        rationale: { type: "string" }
+                        rationale: { type: "string" },
                       },
                       required: ["jobTitle", "company", "rationale"],
-                      additionalProperties: false
-                    }
-                  }
+                      additionalProperties: false,
+                    },
+                  },
                 },
                 required: ["skillSummary", "careerProfile", "recommendations"],
-                additionalProperties: false
-              }
-            }
-          }
+                additionalProperties: false,
+              },
+            },
+          },
         });
 
         const rawContent = response.choices?.[0]?.message?.content;
@@ -427,22 +597,28 @@ Return ONLY valid JSON, no markdown fences.`
         try {
           return JSON.parse(content);
         } catch {
-          return { skillSummary: content, careerProfile: "", recommendations: [] };
+          return {
+            skillSummary: content,
+            careerProfile: "",
+            recommendations: [],
+          };
         }
       }),
 
     upload: protectedProcedure
-      .input(z.object({
-        fileName: z.string(),
-        fileContent: z.string(), // base64 encoded
-        mimeType: z.string(),
-        fileSize: z.number(),
-      }))
+      .input(
+        z.object({
+          fileName: z.string(),
+          fileContent: z.string(), // base64 encoded
+          mimeType: z.string(),
+          fileSize: z.number(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.fileContent, "base64");
         const fileKey = `cv-uploads/${ctx.user.id}/${Date.now()}-${input.fileName}`;
         const { url } = await storagePutCv(fileKey, buffer, input.mimeType);
-        await createCvUpload({
+        const cv = await createCvUpload({
           userId: ctx.user.id,
           fileName: input.fileName,
           fileKey,
@@ -450,12 +626,132 @@ Return ONLY valid JSON, no markdown fences.`
           mimeType: input.mimeType,
           fileSize: input.fileSize,
         });
-        return { success: true, url, fileName: input.fileName };
+        return { success: true, url, fileName: input.fileName, cv };
       }),
 
     myUploads: protectedProcedure.query(async ({ ctx }) => {
       return getUserCvUploads(ctx.user.id);
     }),
+    recommendUpload: protectedProcedure
+      .input(z.object({ cvUploadId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const upload = await getCvUploadById(input.cvUploadId);
+        if (!upload || upload.userId !== ctx.user.id) {
+          throw new Error("CV not found");
+        }
+
+        const response = await fetch(upload.fileUrl);
+        if (!response.ok) {
+          throw new Error("Failed to load uploaded CV file");
+        }
+
+        const fileContentBuffer = Buffer.from(await response.arrayBuffer());
+        const jobList = await getAllJobs();
+
+        try {
+          const formData = new FormData();
+          const blob = new Blob([new Uint8Array(fileContentBuffer)], {
+            type: upload.mimeType,
+          });
+          formData.append("file", blob, upload.fileName);
+
+          const matchResponse = await fetch(
+            `${ENV.recommendationApiUrl}/api/v1/match_cv`,
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          if (!matchResponse.ok) {
+            const errText = await matchResponse.text();
+            throw new Error(errText || matchResponse.statusText);
+          }
+
+          const result = (await matchResponse.json()) as {
+            matches: Array<{
+              job_id: string;
+              match_score: string;
+              mismatch_analysis: {
+                why_not_higher_reasons: string[];
+                missing_skills_detected: string[];
+              };
+            }>;
+          };
+
+          const recommendations = result.matches
+            .map(match => {
+              const dbJob = jobList.find(j => j.id === parseInt(match.job_id));
+              if (!dbJob) return null;
+
+              const score = parseFloat(match.match_score.replace("%", ""));
+              const missingSkills =
+                match.mismatch_analysis.missing_skills_detected;
+              const allSkills = dbJob.skills.split(",").map(s => s.trim());
+              const matchedSkills = allSkills.filter(
+                skill =>
+                  !missingSkills.some(
+                    m => m.toLowerCase() === skill.toLowerCase()
+                  )
+              );
+
+              return {
+                ...dbJob,
+                score: Math.round(score),
+                matchedSkills,
+                missingSkills,
+                mismatchReasons: match.mismatch_analysis.why_not_higher_reasons,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+
+          const detectedSkills = Array.from(
+            new Set(recommendations.flatMap(rec => rec.matchedSkills))
+          ).slice(0, 20);
+
+          return {
+            recommendations,
+            detectedSkills,
+            analyzedAt: new Date().toISOString(),
+          };
+        } catch (error) {
+          console.error(
+            "[FastAPI Proxy] Saved CV match failed, falling back to local search:",
+            error
+          );
+
+          const cvTextFallback = ["txt", "md", "csv"].some(ext =>
+            upload.fileName.toLowerCase().endsWith(ext)
+          )
+            ? fileContentBuffer.toString("utf-8")
+            : "";
+          const recommendations = scoreJobs(cvTextFallback, jobList);
+          const detectedSkills = Array.from(
+            new Set(recommendations.flatMap(rec => rec.matchedSkills))
+          ).slice(0, 20);
+
+          return {
+            recommendations: recommendations.map(r => ({
+              ...r,
+              mismatchReasons: [] as string[],
+            })),
+            detectedSkills,
+            analyzedAt: new Date().toISOString(),
+            fallback: true,
+          };
+        }
+      }),
+    deleteUpload: protectedProcedure
+      .input(z.object({ cvUploadId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const upload = await getCvUploadById(input.cvUploadId);
+        if (!upload || upload.userId !== ctx.user.id) {
+          throw new Error("CV not found");
+        }
+
+        await deleteCvUpload(ctx.user.id, input.cvUploadId);
+        return { success: true };
+      }),
   }),
 
   hr: router({
@@ -467,6 +763,8 @@ Return ONLY valid JSON, no markdown fences.`
         })
       )
       .mutation(async ({ input, ctx }) => {
+        requireSupabaseAdminClient();
+
         await upsertHrUser({
           userId: ctx.user.id,
           company: input.company,
@@ -489,14 +787,16 @@ Return ONLY valid JSON, no markdown fences.`
           description: z.string().min(10),
           skills: z.string().min(1),
           salary: z.string().min(1),
-          images: z.array(
-            z.object({
-              content: z.string(), // base64
-              name: z.string(),
-              mime: z.string(),
-              isPrimary: z.boolean().optional(),
-            })
-          ).optional(),
+          images: z
+            .array(
+              z.object({
+                content: z.string(), // base64
+                name: z.string(),
+                mime: z.string(),
+                isPrimary: z.boolean().optional(),
+              })
+            )
+            .optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -518,19 +818,28 @@ Return ONLY valid JSON, no markdown fences.`
 
         // Trigger a background call to reload jobs in FastAPI to update the vector index
         try {
-          fetch(`${ENV.recommendationApiUrl}/api/v1/reload_jobs`, { method: "POST" })
+          fetch(`${ENV.recommendationApiUrl}/api/v1/reload_jobs`, {
+            method: "POST",
+          })
             .then(res => {
-              if (res.ok) console.log("[FastAPI] Successfully triggered jobs reload");
-              else console.warn("[FastAPI] Jobs reload failed with status:", res.status);
+              if (res.ok)
+                console.log("[FastAPI] Successfully triggered jobs reload");
+              else
+                console.warn(
+                  "[FastAPI] Jobs reload failed with status:",
+                  res.status
+                );
             })
-            .catch(err => console.error("[FastAPI] Error triggering jobs reload:", err));
+            .catch(err =>
+              console.error("[FastAPI] Error triggering jobs reload:", err)
+            );
         } catch (e) {
           console.error("[FastAPI] Error starting jobs reload fetch:", e);
         }
 
         if (input.images && input.images.length > 0) {
           const imageRows = await Promise.all(
-            input.images.map(async (img) => {
+            input.images.map(async img => {
               const buffer = Buffer.from(img.content, "base64");
               const fileKey = `job-images/${job.id}/${Date.now()}-${img.name}`;
               const { url } = await storagePut(fileKey, buffer, img.mime);
@@ -549,18 +858,102 @@ Return ONLY valid JSON, no markdown fences.`
     myJobs: protectedProcedure.query(async ({ ctx }) => {
       const hr = await getHrUserByUserId(ctx.user.id);
       if (!hr) return [];
-      
+
       const allJobs = await getAllJobs();
-      const filtered = allJobs.filter((job) => job.company.toLowerCase() === hr.company.toLowerCase());
-      
+      const filtered = allJobs.filter(
+        job => job.company.toLowerCase() === hr.company.toLowerCase()
+      );
+      const applications = await getHrJobApplications(hr.company);
+      const applicationCounts = applications.reduce((counts, app) => {
+        counts.set(app.jobId, (counts.get(app.jobId) ?? 0) + 1);
+        return counts;
+      }, new Map<number, number>());
+
       return Promise.all(
-        filtered.map(async (job) => {
+        filtered.map(async job => {
           const images = await getJobImages(job.id);
           const primaryImage = images.find(img => img.isPrimary) || images[0];
-          return { ...job, coverImage: primaryImage?.imageUrl || null, images };
+          return {
+            ...job,
+            coverImage: primaryImage?.imageUrl || null,
+            images,
+            applicantCount: applicationCounts.get(job.id) ?? 0,
+          };
         })
       );
     }),
+    applications: protectedProcedure.query(async ({ ctx }) => {
+      const hr = await getHrUserByUserId(ctx.user.id);
+      if (!hr) return [];
+      return getHrJobApplications(hr.company);
+    }),
+    updateApplicationStatus: protectedProcedure
+      .input(
+        z.object({
+          applicationId: z.number().int().positive(),
+          status: z.enum(["accepted", "rejected"]),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const hr = await getHrUserByUserId(ctx.user.id);
+        if (!hr) throw new Error("User is not registered as HR");
+
+        const application = await getJobApplicationById(input.applicationId);
+        if (!application) throw new Error("Application not found");
+
+        const job = await getJobById(application.jobId);
+        if (!job || job.company.toLowerCase() !== hr.company.toLowerCase()) {
+          throw new Error("Unauthorized or application not found");
+        }
+
+        const applicant = await getUserById(application.userId);
+        const updated = await updateJobApplicationStatus(
+          input.applicationId,
+          input.status
+        );
+        let emailSent = false;
+        let emailError: string | null = null;
+
+        if (applicant?.email) {
+          // For accepted applications, also fetch the HR user's contact details
+          // so the applicant can reach out to discuss the interview / next steps.
+          let hrContactName: string | null = null;
+          let hrContactEmail: string | null = null;
+          if (input.status === "accepted") {
+            const hrUser = await getUserById(hr.userId);
+            hrContactName = hrUser?.name ?? null;
+            hrContactEmail = hrUser?.email ?? null;
+          }
+
+          try {
+            const emailResult = await sendApplicationStatusEmail({
+              to: applicant.email,
+              applicantName:
+                applicant.name || applicant.email.split("@")[0] || "Applicant",
+              jobTitle: job.title,
+              company: hr.company,
+              status: input.status,
+              hrName: hrContactName,
+              hrEmail: hrContactEmail,
+            });
+            emailSent = emailResult.sent;
+            if (!emailResult.sent) {
+              emailError = "Email transport is not configured in environment variables.";
+            }
+          } catch (err: any) {
+            console.error("[Email] Failed to send status update email:", err);
+            emailError = err?.message || String(err);
+          }
+        } else {
+          console.warn(
+            "[Email] Applicant has no email; skipped status notification",
+            input.applicationId
+          );
+          emailError = "Applicant does not have an email address configured.";
+        }
+
+        return { ...updated, emailSent, emailError };
+      }),
     deleteJob: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -581,6 +974,9 @@ Return ONLY valid JSON, no markdown fences.`
     submit: protectedProcedure
       .input(z.object({ jobId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role === "hr") {
+          throw new Error("Recruiter accounts cannot apply for jobs.");
+        }
         await createJobApplication({
           userId: ctx.user.id,
           jobId: input.jobId,
@@ -597,7 +993,7 @@ Return ONLY valid JSON, no markdown fences.`
     myApplications: protectedProcedure.query(async ({ ctx }) => {
       const apps = await getUserApplications(ctx.user.id);
       const list = await Promise.all(
-        apps.map(async (app) => {
+        apps.map(async app => {
           const job = await getJobById(app.jobId);
           if (!job) return null;
           const images = await getJobImages(job.id);
@@ -611,7 +1007,9 @@ Return ONLY valid JSON, no markdown fences.`
           };
         })
       );
-      return list.filter((item): item is NonNullable<typeof item> => item !== null);
+      return list.filter(
+        (item): item is NonNullable<typeof item> => item !== null
+      );
     }),
   }),
 
@@ -634,7 +1032,7 @@ Return ONLY valid JSON, no markdown fences.`
     mySaved: protectedProcedure.query(async ({ ctx }) => {
       const saved = await getUserSavedJobs(ctx.user.id);
       const list = await Promise.all(
-        saved.map(async (s) => {
+        saved.map(async s => {
           const job = await getJobById(s.jobId);
           if (!job) return null;
           const images = await getJobImages(job.id);
@@ -648,10 +1046,11 @@ Return ONLY valid JSON, no markdown fences.`
           };
         })
       );
-      return list.filter((item): item is NonNullable<typeof item> => item !== null);
+      return list.filter(
+        (item): item is NonNullable<typeof item> => item !== null
+      );
     }),
   }),
-
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { ADMIN_EMAIL, ADMIN_OPEN_ID } from "./adminAuth";
 import { ENV } from "./_core/env";
+import { storageUrlToProxyPath } from "./storage";
 
 export type User = {
   id: number;
@@ -38,6 +39,14 @@ export type Job = {
   createdAt: string | null;
 };
 
+export type JobImage = {
+  id: number;
+  jobId: number;
+  imageUrl: string;
+  isPrimary: boolean;
+  createdAt: string | null;
+};
+
 export type CvUpload = {
   id: number;
   userId: number;
@@ -66,7 +75,7 @@ export type AdminDashboardSnapshot = {
   totalJobs: number;
   totalAdmins: number;
   recentUsers: Array<User & { cvUploads: number }>;
-  recentJobs: Job[];
+  recentJobs: Array<Job & { coverImage: string | null; images: JobImage[] }>;
   recentUploads: Array<
     CvUpload & {
       userName: string | null;
@@ -78,12 +87,15 @@ export type AdminDashboardSnapshot = {
 type DbRow = Record<string, unknown>;
 
 let _supabase: SupabaseClient | null | undefined;
+let _supabaseAdmin: SupabaseClient | null | undefined;
 
 export function getSupabase() {
   if (_supabase !== undefined) return _supabase;
 
   if (!ENV.supabaseUrl || !ENV.supabaseKey) {
-    console.warn("[Supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+    console.warn(
+      "[Supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+    );
     _supabase = null;
     return _supabase;
   }
@@ -96,6 +108,33 @@ export function getSupabase() {
   });
 
   return _supabase;
+}
+
+export function getSupabaseAdmin() {
+  if (_supabaseAdmin !== undefined) return _supabaseAdmin;
+
+  if (!ENV.supabaseUrl || !ENV.supabaseServiceRoleKey) {
+    if (!ENV.supabaseServiceRoleKey) {
+      console.warn(
+        "[Supabase] Missing SUPABASE_SERVICE_ROLE_KEY. Server database writes may fail when RLS is enabled."
+      );
+    }
+    _supabaseAdmin = null;
+    return _supabaseAdmin;
+  }
+
+  _supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  return _supabaseAdmin;
+}
+
+function getDatabaseSupabase() {
+  return getSupabaseAdmin() ?? getSupabase();
 }
 
 function asString(value: unknown, fallback = "") {
@@ -115,18 +154,36 @@ function normalizeDate(value: Date | string | null | undefined) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+function splitStoredName(value: string | null) {
+  if (!value) return { name: null, imageUrl: null };
+
+  const [name, imageUrl] = value.split(":::");
+  return {
+    name: name || null,
+    imageUrl: imageUrl || null,
+  };
+}
+
+function normalizeStoredImageUrl(value: string | null) {
+  return storageUrlToProxyPath(value);
+}
+
 function mapUser(row: DbRow): User {
+  const storedName = splitStoredName(asNullableString(row.name));
+
   return {
     id: asNumber(row.id),
     openId: asString(row.open_id),
-    name: asNullableString(row.name),
+    name: storedName.name,
     email: asNullableString(row.email),
     loginMethod: asNullableString(row.login_method),
     role: asString(row.role, "user"),
     lastSignedIn: asNullableString(row.last_signed_in),
     createdAt: asNullableString(row.created_at),
     updatedAt: asNullableString(row.updated_at),
-    profileImageUrl: asNullableString(row.profile_image_url),
+    profileImageUrl: normalizeStoredImageUrl(
+      asNullableString(row.profile_image_url) ?? storedName.imageUrl
+    ),
   };
 }
 
@@ -163,22 +220,28 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     throw new Error("User openId is required for upsert");
   }
 
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const now = new Date().toISOString();
+  const storedName = splitStoredName(user.name ?? null);
   const row: Record<string, any> = {
     open_id: user.openId,
-    name: user.name ?? null,
+    name: storedName.name,
     email: user.email ?? null,
     login_method: user.loginMethod ?? null,
-    role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
     last_signed_in: normalizeDate(user.lastSignedIn) ?? now,
     updated_at: now,
   };
 
+  if (user.role) {
+    row.role = user.role;
+  } else if (user.openId === ENV.ownerOpenId) {
+    row.role = "admin";
+  }
+
   if (user.profileImageUrl !== undefined) {
-    row.profile_image_url = user.profileImageUrl;
+    row.profile_image_url = user.profileImageUrl ?? storedName.imageUrl;
   }
 
   const { error } = await supabase
@@ -208,7 +271,7 @@ export async function getUserByOpenId(openId: string) {
     } satisfies User;
   }
 
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return undefined;
 
   const { data, error } = await supabase
@@ -225,11 +288,32 @@ export async function getUserByOpenId(openId: string) {
   return data ? mapUser(data as DbRow) : undefined;
 }
 
+export async function getUserById(id: number): Promise<User | null> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Supabase] Failed to fetch user by id:", error);
+    return null;
+  }
+
+  return data ? mapUser(data as DbRow) : null;
+}
+
 export async function getJobs(search?: string) {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return [];
 
-  let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
+  let query = supabase
+    .from("jobs")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (search && search.trim()) {
     const term = `%${search.trim()}%`;
@@ -242,7 +326,7 @@ export async function getJobs(search?: string) {
         `level.ilike.${term}`,
         `description.ilike.${term}`,
         `skills.ilike.${term}`,
-      ].join(","),
+      ].join(",")
     );
   }
 
@@ -253,7 +337,7 @@ export async function getJobs(search?: string) {
     return [];
   }
 
-  return (data ?? []).map((row) => mapJob(row as DbRow));
+  return (data ?? []).map(row => mapJob(row as DbRow));
 }
 
 export async function getAllJobs() {
@@ -261,7 +345,7 @@ export async function getAllJobs() {
 }
 
 export async function getJobById(id: number): Promise<Job | null> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return null;
 
   const { data, error } = await supabase
@@ -278,27 +362,33 @@ export async function getJobById(id: number): Promise<Job | null> {
   return data ? mapJob(data as DbRow) : null;
 }
 
-export async function createCvUpload(data: InsertCvUpload) {
-  const supabase = getSupabase();
+export async function createCvUpload(data: InsertCvUpload): Promise<CvUpload> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) throw new Error("Supabase is not configured");
 
-  const { error } = await supabase.from("cv_uploads").insert({
-    user_id: data.userId,
-    file_name: data.fileName,
-    file_key: data.fileKey,
-    file_url: data.fileUrl,
-    mime_type: data.mimeType,
-    file_size: data.fileSize,
-  });
+  const { data: row, error } = await supabase
+    .from("cv_uploads")
+    .insert({
+      user_id: data.userId,
+      file_name: data.fileName,
+      file_key: data.fileKey,
+      file_url: data.fileUrl,
+      mime_type: data.mimeType,
+      file_size: data.fileSize,
+    })
+    .select()
+    .single();
 
   if (error) {
     console.error("[Supabase] Failed to create CV upload:", error);
     throw error;
   }
+
+  return mapCvUpload(row as DbRow);
 }
 
 export async function getUserCvUploads(userId: number) {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return [];
 
   const { data, error } = await supabase
@@ -312,20 +402,49 @@ export async function getUserCvUploads(userId: number) {
     return [];
   }
 
-  return (data ?? []).map((row) => mapCvUpload(row as DbRow));
+  return (data ?? []).map(row => mapCvUpload(row as DbRow));
+}
+
+export async function getCvUploadById(id: number): Promise<CvUpload | null> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("cv_uploads")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Supabase] Failed to fetch CV upload:", error);
+    return null;
+  }
+
+  return data ? mapCvUpload(data as DbRow) : null;
+}
+
+export async function deleteCvUpload(
+  userId: number,
+  cvUploadId: number
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("cv_uploads")
+    .delete()
+    .eq("id", cvUploadId)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("[Supabase] Failed to delete CV upload:", error);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Extended Feature Types & Mappers
 // ---------------------------------------------------------------------------
-
-export type JobImage = {
-  id: number;
-  jobId: number;
-  imageUrl: string;
-  isPrimary: boolean;
-  createdAt: string | null;
-};
 
 export type InsertJobImage = {
   jobId: number;
@@ -358,6 +477,15 @@ export type JobApplication = {
   appliedAt: string | null;
 };
 
+export type HrJobApplication = JobApplication & {
+  applicantName: string | null;
+  applicantEmail: string | null;
+  applicantProfileImageUrl: string | null;
+  job: Job;
+  cvUrl: string | null;
+  cvFileName: string | null;
+};
+
 export type InsertJobApplication = {
   userId: number;
   jobId: number;
@@ -380,7 +508,7 @@ function mapJobImage(row: DbRow): JobImage {
   return {
     id: asNumber(row.id),
     jobId: asNumber(row.job_id),
-    imageUrl: asString(row.image_url),
+    imageUrl: normalizeStoredImageUrl(asString(row.image_url)) ?? "",
     isPrimary: typeof row.is_primary === "boolean" ? row.is_primary : false,
     createdAt: asNullableString(row.created_at),
   };
@@ -422,10 +550,10 @@ function mapSavedJob(row: DbRow): SavedJob {
 // ---------------------------------------------------------------------------
 
 export async function addJobImages(images: InsertJobImage[]): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
-  const rows = images.map((img) => ({
+  const rows = images.map(img => ({
     job_id: img.jobId,
     image_url: img.imageUrl,
     is_primary: img.isPrimary ?? false,
@@ -439,7 +567,7 @@ export async function addJobImages(images: InsertJobImage[]): Promise<void> {
 }
 
 export async function getJobImages(jobId: number): Promise<JobImage[]> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return [];
 
   const { data, error } = await supabase
@@ -453,11 +581,11 @@ export async function getJobImages(jobId: number): Promise<JobImage[]> {
     return [];
   }
 
-  return (data ?? []).map((row) => mapJobImage(row as DbRow));
+  return (data ?? []).map(row => mapJobImage(row as DbRow));
 }
 
 export async function upsertHrUser(hr: InsertHrUser): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const now = new Date().toISOString();
@@ -479,8 +607,10 @@ export async function upsertHrUser(hr: InsertHrUser): Promise<void> {
   }
 }
 
-export async function getHrUserByUserId(userId: number): Promise<HrUser | null> {
-  const supabase = getSupabase();
+export async function getHrUserByUserId(
+  userId: number
+): Promise<HrUser | null> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return null;
 
   const { data, error } = await supabase
@@ -497,8 +627,32 @@ export async function getHrUserByUserId(userId: number): Promise<HrUser | null> 
   return data ? mapHrUser(data as DbRow) : null;
 }
 
-export async function createJobApplication(app: InsertJobApplication): Promise<void> {
-  const supabase = getSupabase();
+export async function getHrUserByCompany(
+  company: string
+): Promise<HrUser | null> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("hr_users")
+    .select("*")
+    .ilike("company", company)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Supabase] Failed to fetch HR user by company:", error);
+    return null;
+  }
+
+  return data ? mapHrUser(data as DbRow) : null;
+}
+
+export async function createJobApplication(
+  app: InsertJobApplication
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const { error } = await supabase.from("job_applications").insert({
@@ -513,8 +667,11 @@ export async function createJobApplication(app: InsertJobApplication): Promise<v
   }
 }
 
-export async function deleteJobApplication(userId: number, jobId: number): Promise<void> {
-  const supabase = getSupabase();
+export async function deleteJobApplication(
+  userId: number,
+  jobId: number
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const { error } = await supabase
@@ -529,8 +686,10 @@ export async function deleteJobApplication(userId: number, jobId: number): Promi
   }
 }
 
-export async function getUserApplications(userId: number): Promise<JobApplication[]> {
-  const supabase = getSupabase();
+export async function getUserApplications(
+  userId: number
+): Promise<JobApplication[]> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return [];
 
   const { data, error } = await supabase
@@ -543,11 +702,142 @@ export async function getUserApplications(userId: number): Promise<JobApplicatio
     return [];
   }
 
-  return (data ?? []).map((row) => mapJobApplication(row as DbRow));
+  return (data ?? []).map(row => mapJobApplication(row as DbRow));
+}
+
+export async function getHrJobApplications(
+  company: string
+): Promise<HrJobApplication[]> {
+  const jobs = (await getAllJobs()).filter(
+    job => job.company.toLowerCase() === company.toLowerCase()
+  );
+
+  if (jobs.length === 0) return [];
+
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return [];
+
+  const jobsById = new Map(jobs.map(job => [job.id, job]));
+  const { data, error } = await supabase
+    .from("job_applications")
+    .select("*")
+    .in("job_id", jobs.map(job => job.id))
+    .order("applied_at", { ascending: false });
+
+  if (error) {
+    console.error("[Supabase] Failed to fetch HR applications:", error);
+    return [];
+  }
+
+  const applications = (data ?? []).map(row =>
+    mapJobApplication(row as DbRow)
+  );
+  const userIds = Array.from(new Set(applications.map(app => app.userId)));
+  let usersById = new Map<number, User>();
+  let latestCvByUserId = new Map<number, CvUpload>();
+
+  if (userIds.length > 0) {
+    // Fetch users details
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("*")
+      .in("id", userIds);
+
+    if (usersError) {
+      console.error("[Supabase] Failed to fetch application users:", usersError);
+    } else {
+      usersById = ((users ?? []) as DbRow[]).reduce((map, row) => {
+        const user = mapUser(row);
+        map.set(user.id, user);
+        return map;
+      }, new Map<number, User>());
+    }
+
+    // Fetch user CV uploads
+    const { data: cvs, error: cvsError } = await supabase
+      .from("cv_uploads")
+      .select("*")
+      .in("user_id", userIds)
+      .order("created_at", { ascending: false });
+
+    if (cvsError) {
+      console.error("[Supabase] Failed to fetch applicant CVs:", cvsError);
+    } else {
+      ((cvs ?? []) as DbRow[]).forEach(row => {
+        const cv = mapCvUpload(row);
+        // Since list is ordered by created_at desc, the first CV encountered for a userId is their latest.
+        if (!latestCvByUserId.has(cv.userId)) {
+          latestCvByUserId.set(cv.userId, cv);
+        }
+      });
+    }
+  }
+
+  return applications
+    .map(app => {
+      const job = jobsById.get(app.jobId);
+      if (!job) return null;
+
+      const applicant = usersById.get(app.userId) ?? null;
+      const latestCv = latestCvByUserId.get(app.userId) ?? null;
+
+      return {
+        ...app,
+        applicantName: applicant?.name ?? null,
+        applicantEmail: applicant?.email ?? null,
+        applicantProfileImageUrl: applicant?.profileImageUrl ?? null,
+        job,
+        cvUrl: latestCv?.fileUrl ?? null,
+        cvFileName: latestCv?.fileName ?? null,
+      };
+    })
+    .filter((app): app is HrJobApplication => app !== null);
+}
+
+export async function getJobApplicationById(
+  applicationId: number
+): Promise<JobApplication | null> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("job_applications")
+    .select("*")
+    .eq("id", applicationId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Supabase] Failed to fetch job application:", error);
+    return null;
+  }
+
+  return data ? mapJobApplication(data as DbRow) : null;
+}
+
+export async function updateJobApplicationStatus(
+  applicationId: number,
+  status: "accepted" | "rejected"
+): Promise<JobApplication> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("job_applications")
+    .update({ status })
+    .eq("id", applicationId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[Supabase] Failed to update job application:", error);
+    throw error;
+  }
+
+  return mapJobApplication(data as DbRow);
 }
 
 export async function createSavedJob(saved: InsertSavedJob): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const { error } = await supabase.from("saved_jobs").insert({
@@ -561,8 +851,11 @@ export async function createSavedJob(saved: InsertSavedJob): Promise<void> {
   }
 }
 
-export async function deleteSavedJob(userId: number, jobId: number): Promise<void> {
-  const supabase = getSupabase();
+export async function deleteSavedJob(
+  userId: number,
+  jobId: number
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const { error } = await supabase
@@ -578,7 +871,7 @@ export async function deleteSavedJob(userId: number, jobId: number): Promise<voi
 }
 
 export async function getUserSavedJobs(userId: number): Promise<SavedJob[]> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return [];
 
   const { data, error } = await supabase
@@ -591,11 +884,13 @@ export async function getUserSavedJobs(userId: number): Promise<SavedJob[]> {
     return [];
   }
 
-  return (data ?? []).map((row) => mapSavedJob(row as DbRow));
+  return (data ?? []).map(row => mapSavedJob(row as DbRow));
 }
 
-export async function createJob(job: Omit<Job, "id" | "createdAt">): Promise<Job> {
-  const supabase = getSupabase();
+export async function createJob(
+  job: Omit<Job, "id" | "createdAt">
+): Promise<Job> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) throw new Error("Supabase not configured");
 
   const { data, error } = await supabase
@@ -622,8 +917,12 @@ export async function createJob(job: Omit<Job, "id" | "createdAt">): Promise<Job
 }
 
 export async function deleteJob(id: number): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
+
+  await supabase.from("job_images").delete().eq("job_id", id);
+  await supabase.from("job_applications").delete().eq("job_id", id);
+  await supabase.from("saved_jobs").delete().eq("job_id", id);
 
   const { error } = await supabase.from("jobs").delete().eq("id", id);
   if (error) {
@@ -632,8 +931,77 @@ export async function deleteJob(id: number): Promise<void> {
   }
 }
 
-export async function updateUserRole(userId: number, role: string): Promise<void> {
-  const supabase = getSupabase();
+export async function updateJob(
+  id: number,
+  job: Omit<Job, "id" | "createdAt">
+): Promise<Job> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("jobs")
+    .update({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      type: job.type,
+      level: job.level,
+      description: job.description,
+      skills: job.skills,
+      salary: job.salary,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[Supabase] Failed to update job:", error);
+    throw error;
+  }
+
+  return mapJob(data as DbRow);
+}
+
+export async function replaceJobImages(
+  jobId: number,
+  imageUrls: string[]
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return;
+
+  const { error: deleteError } = await supabase
+    .from("job_images")
+    .delete()
+    .eq("job_id", jobId);
+
+  if (deleteError) {
+    console.error("[Supabase] Failed to replace job images:", deleteError);
+    throw deleteError;
+  }
+
+  const rows = imageUrls
+    .map(url => url.trim())
+    .filter(Boolean)
+    .map((imageUrl, index) => ({
+      job_id: jobId,
+      image_url: imageUrl,
+      is_primary: index === 0,
+    }));
+
+  if (rows.length === 0) return;
+
+  const { error } = await supabase.from("job_images").insert(rows);
+  if (error) {
+    console.error("[Supabase] Failed to add replacement job images:", error);
+    throw error;
+  }
+}
+
+export async function updateUserRole(
+  userId: number,
+  role: string
+): Promise<void> {
+  const supabase = getDatabaseSupabase();
   if (!supabase) return;
 
   const { error } = await supabase
@@ -643,6 +1011,50 @@ export async function updateUserRole(userId: number, role: string): Promise<void
 
   if (error) {
     console.error("[Supabase] Failed to update user role:", error);
+    throw error;
+  }
+}
+
+export async function updateAdminUser(
+  userId: number,
+  user: Pick<User, "name" | "email" | "role" | "profileImageUrl">
+): Promise<User> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("users")
+    .update({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      profile_image_url: user.profileImageUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[Supabase] Failed to update user:", error);
+    throw error;
+  }
+
+  return mapUser(data as DbRow);
+}
+
+export async function deleteUser(userId: number): Promise<void> {
+  const supabase = getDatabaseSupabase();
+  if (!supabase) return;
+
+  await supabase.from("cv_uploads").delete().eq("user_id", userId);
+  await supabase.from("job_applications").delete().eq("user_id", userId);
+  await supabase.from("saved_jobs").delete().eq("user_id", userId);
+  await supabase.from("hr_users").delete().eq("user_id", userId);
+
+  const { error } = await supabase.from("users").delete().eq("id", userId);
+  if (error) {
+    console.error("[Supabase] Failed to delete user:", error);
     throw error;
   }
 }
@@ -660,12 +1072,12 @@ export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapsho
     recentUploads: [],
   };
 
-  const supabase = getSupabase();
+  const supabase = getDatabaseSupabase();
   if (!supabase) return emptySnapshot;
 
   const countRows = async (
     tableName: string,
-    configure?: (query: any) => any,
+    configure?: (query: any) => any
   ) => {
     const baseQuery = supabase
       .from(tableName)
@@ -695,12 +1107,12 @@ export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapsho
     recentUploadsResult,
   ] = await Promise.all([
     countRows("users"),
-    countRows("users", (query) =>
-      query.gte("last_signed_in", thirtyDaysAgo.toISOString()),
+    countRows("users", query =>
+      query.gte("last_signed_in", thirtyDaysAgo.toISOString())
     ),
     countRows("cv_uploads"),
     countRows("jobs"),
-    countRows("users", (query) => query.eq("role", "admin")),
+    countRows("users", query => query.eq("role", "admin")),
     supabase
       .from("users")
       .select("*")
@@ -719,55 +1131,111 @@ export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapsho
   ]);
 
   if (recentUsersResult.error) {
-    console.error("[Supabase] Failed to fetch recent users:", recentUsersResult.error);
+    console.error(
+      "[Supabase] Failed to fetch recent users:",
+      recentUsersResult.error
+    );
   }
   if (recentJobsResult.error) {
-    console.error("[Supabase] Failed to fetch recent jobs:", recentJobsResult.error);
+    console.error(
+      "[Supabase] Failed to fetch recent jobs:",
+      recentJobsResult.error
+    );
   }
   if (recentUploadsResult.error) {
-    console.error("[Supabase] Failed to fetch recent CV uploads:", recentUploadsResult.error);
+    console.error(
+      "[Supabase] Failed to fetch recent CV uploads:",
+      recentUploadsResult.error
+    );
   }
 
-  const recentUsers = ((recentUsersResult.data ?? []) as DbRow[]).map((row) => mapUser(row));
-  const recentJobs = ((recentJobsResult.data ?? []) as DbRow[]).map((row) => mapJob(row));
-  const recentUploads = ((recentUploadsResult.data ?? []) as DbRow[]).map((row) => mapCvUpload(row));
-  const userIds = recentUsers.map((user) => user.id);
-  const uploadUserIds = recentUploads.map((upload) => upload.userId);
+  const recentUsers = ((recentUsersResult.data ?? []) as DbRow[]).map(row =>
+    mapUser(row)
+  );
+  const recentJobs = ((recentJobsResult.data ?? []) as DbRow[]).map(row =>
+    mapJob(row)
+  );
+  const recentUploads = ((recentUploadsResult.data ?? []) as DbRow[]).map(row =>
+    mapCvUpload(row)
+  );
+  const jobIds = recentJobs.map(job => job.id);
+  const userIds = recentUsers.map(user => user.id);
+  const uploadUserIds = recentUploads.map(upload => upload.userId);
   const visibleUserIds = Array.from(new Set([...userIds, ...uploadUserIds]));
 
   let cvUploadCounts = new Map<number, number>();
   let usersById = new Map<number, User>();
+  let imagesByJobId = new Map<number, JobImage[]>();
 
-  if (visibleUserIds.length > 0) {
-    const [userUploadsResult, uploadUsersResult] = await Promise.all([
-      supabase
-        .from("cv_uploads")
-        .select("user_id")
-        .in("user_id", visibleUserIds),
-      supabase
-        .from("users")
-        .select("*")
-        .in("id", visibleUserIds),
-    ]);
+  if (visibleUserIds.length > 0 || jobIds.length > 0) {
+    const [userUploadsResult, uploadUsersResult, jobImagesResult] =
+      await Promise.all([
+        visibleUserIds.length > 0
+          ? supabase
+              .from("cv_uploads")
+              .select("user_id")
+              .in("user_id", visibleUserIds)
+          : Promise.resolve({ data: [], error: null }),
+        visibleUserIds.length > 0
+          ? supabase.from("users").select("*").in("id", visibleUserIds)
+          : Promise.resolve({ data: [], error: null }),
+        jobIds.length > 0
+          ? supabase
+              .from("job_images")
+              .select("*")
+              .in("job_id", jobIds)
+              .order("created_at", { ascending: true })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
 
     if (userUploadsResult.error) {
-      console.error("[Supabase] Failed to fetch CV upload counts:", userUploadsResult.error);
+      console.error(
+        "[Supabase] Failed to fetch CV upload counts:",
+        userUploadsResult.error
+      );
     } else {
-      cvUploadCounts = ((userUploadsResult.data ?? []) as DbRow[]).reduce((counts, row) => {
-        const userId = asNumber(row.user_id);
-        counts.set(userId, (counts.get(userId) ?? 0) + 1);
-        return counts;
-      }, new Map<number, number>());
+      cvUploadCounts = ((userUploadsResult.data ?? []) as DbRow[]).reduce(
+        (counts, row) => {
+          const userId = asNumber(row.user_id);
+          counts.set(userId, (counts.get(userId) ?? 0) + 1);
+          return counts;
+        },
+        new Map<number, number>()
+      );
     }
 
     if (uploadUsersResult.error) {
-      console.error("[Supabase] Failed to fetch upload users:", uploadUsersResult.error);
+      console.error(
+        "[Supabase] Failed to fetch upload users:",
+        uploadUsersResult.error
+      );
     } else {
-      usersById = ((uploadUsersResult.data ?? []) as DbRow[]).reduce((users, row) => {
-        const user = mapUser(row);
-        users.set(user.id, user);
-        return users;
-      }, new Map<number, User>());
+      usersById = ((uploadUsersResult.data ?? []) as DbRow[]).reduce(
+        (users, row) => {
+          const user = mapUser(row);
+          users.set(user.id, user);
+          return users;
+        },
+        new Map<number, User>()
+      );
+    }
+
+    if (jobImagesResult.error) {
+      console.error(
+        "[Supabase] Failed to fetch job images:",
+        jobImagesResult.error
+      );
+    } else {
+      imagesByJobId = ((jobImagesResult.data ?? []) as DbRow[]).reduce(
+        (images, row) => {
+          const image = mapJobImage(row);
+          const jobImages = images.get(image.jobId) ?? [];
+          jobImages.push(image);
+          images.set(image.jobId, jobImages);
+          return images;
+        },
+        new Map<number, JobImage[]>()
+      );
     }
   }
 
@@ -778,12 +1246,20 @@ export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapsho
     totalCvUploads,
     totalJobs,
     totalAdmins,
-    recentUsers: recentUsers.map((user) => ({
+    recentUsers: recentUsers.map(user => ({
       ...user,
       cvUploads: cvUploadCounts.get(user.id) ?? 0,
     })),
-    recentJobs,
-    recentUploads: recentUploads.map((upload) => {
+    recentJobs: recentJobs.map(job => {
+      const images = imagesByJobId.get(job.id) ?? [];
+      const primaryImage = images.find(image => image.isPrimary) ?? images[0];
+      return {
+        ...job,
+        coverImage: primaryImage?.imageUrl ?? null,
+        images,
+      };
+    }),
+    recentUploads: recentUploads.map(upload => {
       const uploadUser = usersById.get(upload.userId) ?? null;
       return {
         ...upload,

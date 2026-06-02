@@ -55,6 +55,26 @@ function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
 }
 
+function encodeKeyPath(key: string): string {
+  return key
+    .split("/")
+    .map(segment => encodeURIComponent(segment))
+    .join("/");
+}
+
+function decodeKeyPath(key: string): string {
+  return key
+    .split("/")
+    .map(segment => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+}
+
 function appendHashSuffix(relKey: string): string {
   const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   const lastDot = relKey.lastIndexOf(".");
@@ -89,7 +109,64 @@ function publicUrl(key: string): string {
  * The Next.js route at /storage-proxy/[...key] will redirect to a signed URL.
  */
 function proxyPath(key: string): string {
-  return `/storage-proxy/${key}`;
+  return `/storage-proxy/${encodeKeyPath(key)}`;
+}
+
+export function storageProxyPath(relKey: string): string {
+  return proxyPath(normalizeKey(relKey));
+}
+
+export function storageUrlToProxyPath(
+  value: string | null | undefined,
+  bucket = ENV.s3Bucket
+): string | null {
+  const rawValue = value?.trim();
+  if (!rawValue) return null;
+
+  const isSupabaseObjectUrl = rawValue.includes("/storage/v1/object/");
+  if (
+    rawValue.startsWith("data:") ||
+    rawValue.startsWith("blob:") ||
+    ((rawValue.startsWith("http://") || rawValue.startsWith("https://")) &&
+      !isSupabaseObjectUrl)
+  ) {
+    return rawValue;
+  }
+
+  try {
+    const url = new URL(rawValue, "http://app.local");
+    const path = url.pathname;
+    const proxyPrefixes = ["/storage-proxy/", "/manus-storage/"];
+
+    for (const prefix of proxyPrefixes) {
+      if (path.startsWith(prefix)) {
+        return storageProxyPath(decodeKeyPath(path.slice(prefix.length)));
+      }
+    }
+
+    const publicPrefix = `/storage/v1/object/public/${bucket}/`;
+    const signedPrefix = `/storage/v1/object/sign/${bucket}/`;
+
+    if (path.startsWith(publicPrefix)) {
+      return storageProxyPath(decodeKeyPath(path.slice(publicPrefix.length)));
+    }
+
+    if (path.startsWith(signedPrefix)) {
+      return storageProxyPath(decodeKeyPath(path.slice(signedPrefix.length)));
+    }
+  } catch {
+    // Treat non-URL values as possible raw storage keys below.
+  }
+
+  if (
+    rawValue.startsWith("job-images/") ||
+    rawValue.startsWith("post-images/") ||
+    rawValue.startsWith("profile-images/")
+  ) {
+    return storageProxyPath(rawValue);
+  }
+
+  return rawValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +199,7 @@ export async function storagePut(
 
   await s3.send(command);
 
-  const url = publicUrl(key);
+  const url = storageProxyPath(key);
   console.log(`[Storage] Uploaded → ${url}`);
 
   return { key, url };

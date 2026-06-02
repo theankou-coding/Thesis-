@@ -1,7 +1,5 @@
-"use client";
-
-import MyCVs from "@/views/MyCVs";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <MyCVs />;
+  redirect("/upload-cv");
 }
