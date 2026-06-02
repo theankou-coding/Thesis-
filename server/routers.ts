@@ -1,4 +1,5 @@
 import { systemRouter } from "./_core/systemRouter";
+<<<<<<< HEAD
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { expireSessionCookie, setSessionCookie } from "./_core/context";
 import { z } from "zod";
@@ -25,6 +26,12 @@ import {
   deleteJob,
   updateUserRole,
 } from "./db";
+=======
+import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { expireSessionCookie } from "./_core/context";
+import { z } from "zod";
+import { getJobs, getAllJobs, createCvUpload, getUserCvUploads, getAdminDashboardSnapshot } from "./db";
+>>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
 import { invokeLLM } from "./_core/llm";
 import { storagePut, storagePutCv } from "./storage";
 import { sdk } from "./_core/sdk";
@@ -191,6 +198,10 @@ export const appRouter = router({
 
         return { success: true, user: { email: data.user.email, id: data.user.id } };
       }),
+  }),
+
+  admin: router({
+    dashboard: adminProcedure.query(() => getAdminDashboardSnapshot()),
   }),
 
   jobs: router({

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { usePathname } from "next/navigation";
 import superjson from "superjson";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from "@shared/const";
@@ -24,6 +25,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 };
 
 export function ClientProviders({ children }: Readonly<{ children: React.ReactNode }>) {
+  const pathname = usePathname();
+  const isAdminRoute = pathname?.startsWith("/admin");
+
   const [queryClient] = useState(() => {
     const client = new QueryClient();
 
@@ -71,9 +75,9 @@ export function ClientProviders({ children }: Readonly<{ children: React.ReactNo
             <TooltipProvider>
               <Toaster />
               <div className="flex min-h-screen flex-col">
-                <Header />
+                {!isAdminRoute && <Header />}
                 <main className="flex-1">{children}</main>
-                <Footer />
+                {!isAdminRoute && <Footer />}
               </div>
             </TooltipProvider>
           </ThemeProvider>

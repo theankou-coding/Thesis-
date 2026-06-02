@@ -103,6 +103,7 @@ export default function Register() {
 
   return (
     <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center px-4 py-12">
+<<<<<<< HEAD
       <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)] bg-card text-card-foreground">
         {registeredEmail ? (
           <CardContent className="pt-10 pb-10 text-center space-y-6">
@@ -113,6 +114,20 @@ export default function Register() {
                   <Mail className="h-8 w-8" />
                 </div>
               </div>
+=======
+      <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)]">
+        <CardHeader className="text-center pb-2">
+          <img src="logo.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
+          <CardTitle className="text-2xl font-bold text-primary">Create Account</CardTitle>
+          <CardDescription className="text-muted-foreground">Join the platform and start your career journey</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6 pt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input id="name" value={name} onChange={e => setName(e.target.value)} placeholder="John Doe" className="h-11" />
+              {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+>>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
             </div>
             <div className="space-y-2">
               <CardTitle className="text-2xl font-bold text-foreground">Confirm Your Email</CardTitle>

@@ -6,16 +6,21 @@ import { useCallback, useEffect, useMemo } from "react";
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
   redirectPath?: string;
+  refreshOnMount?: boolean;
 };
 
 export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
-    options ?? {};
+  const {
+    redirectOnUnauthenticated = false,
+    redirectPath = getLoginUrl(),
+    refreshOnMount = false,
+  } = options ?? {};
   const utils = trpc.useUtils();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
+    refetchOnMount: refreshOnMount ? "always" : true,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -50,16 +55,21 @@ export function useAuth(options?: UseAuthOptions) {
     }
     return {
       user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
+      loading:
+        meQuery.isLoading ||
+        (refreshOnMount && meQuery.isFetching) ||
+        logoutMutation.isPending,
       error: meQuery.error ?? logoutMutation.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
     };
   }, [
     meQuery.data,
     meQuery.error,
+    meQuery.isFetching,
     meQuery.isLoading,
     logoutMutation.error,
     logoutMutation.isPending,
+    refreshOnMount,
   ]);
 
   useEffect(() => {

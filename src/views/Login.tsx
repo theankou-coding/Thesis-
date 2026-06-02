@@ -50,7 +50,11 @@ export default function Login() {
     <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md shadow-lg border-t-4 border-t-primary bg-card text-card-foreground">
         <CardHeader className="text-center pb-2">
+<<<<<<< HEAD
           <img src="/logo.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
+=======
+          <img src="logo.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
+>>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
           <CardTitle className="text-2xl font-bold text-primary">Welcome Back</CardTitle>
           <CardDescription className="text-muted-foreground">Sign in to access your career dashboard</CardDescription>
         </CardHeader>

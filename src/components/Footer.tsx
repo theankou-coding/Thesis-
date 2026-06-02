@@ -5,9 +5,15 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-[hsl(220,60%,12%)] text-white mt-auto">
       <div className="container py-12">
+<<<<<<< HEAD
         <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
           <div className="space-y-4">
             <img src="/logo.png" alt="JOB CV" className="h-10 mb-2 brightness-0 invert" />
+=======
+        <div className="grid gap-8 md:grid-cols-3">
+          <div>
+            <img src="logo.png" alt="JOB CV" className="h-10 mb-4" />
+>>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
             <p className="text-sm leading-relaxed text-gray-300">
               A professional career platform that helps candidates create compelling CVs, receive intelligent job recommendations, and connect with opportunities aligned to their skills.
             </p>
