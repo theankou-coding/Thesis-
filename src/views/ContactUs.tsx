@@ -15,62 +15,61 @@ import {
   Clock,
   Send,
   MessageSquare,
-  Headphones,
-  Globe,
+  User,
   CheckCircle2,
 } from "lucide-react";
 
 const contactMethods = [
   {
+    icon: User,
+    title: "Founder",
+    description: "Thesis project contact.",
+    contact: "Loem Theankou",
+    link: "#",
+    color: "from-violet-500 to-purple-500",
+  },
+  {
     icon: Mail,
-    title: "Email Us",
-    description: "Our friendly team is here to help.",
-    contact: "contact@jobcv.com",
-    link: "mailto:contact@jobcv.com",
+    title: "Email",
+    description: "Send a message anytime.",
+    contact: "loemtheankou168@gmail.com",
+    link: "mailto:loemtheankou168@gmail.com",
     color: "from-blue-500 to-cyan-500",
   },
   {
     icon: Phone,
-    title: "Call Us",
-    description: "Mon–Fri from 8am to 5pm (ICT).",
-    contact: "+84 28 3822 4567",
-    link: "tel:+842838224567",
-    color: "from-violet-500 to-purple-500",
+    title: "Phone",
+    description: "Call for thesis project inquiries.",
+    contact: "087459323",
+    link: "tel:087459323",
+    color: "from-rose-500 to-pink-500",
   },
   {
     icon: MapPin,
-    title: "Office",
-    description: "Come say hello at our HQ.",
-    contact: "123 Nguyen Hue, District 1, HCMC",
+    title: "Location",
+    description: "Based in Cambodia.",
+    contact: "Phnom Penh, Cambodia",
     link: "https://maps.google.com",
     color: "from-emerald-500 to-teal-500",
-  },
-  {
-    icon: Globe,
-    title: "Live Chat",
-    description: "Available during business hours.",
-    contact: "Start a live chat",
-    link: "#",
-    color: "from-rose-500 to-pink-500",
   },
 ];
 
 const faqs = [
   {
     q: "How does the AI matching work?",
-    a: "Our AI reads your CV text, extracts skills, experience levels, and career preferences, then compares these against real-time job listings to surface the most relevant opportunities for you.",
+    a: "The AI reads CV text, extracts skills and experience, then compares those details with job requirements to suggest relevant opportunities.",
   },
   {
     q: "Is my CV data private?",
-    a: "Absolutely. Your CV is stored encrypted and is never shared with third parties without your explicit consent. You control who sees your information.",
+    a: "CV content and candidate information are handled carefully for the thesis project and are used to support the matching workflow.",
   },
   {
     q: "Can I use JOB CV for free?",
-    a: "Yes! Core features including job browsing, CV uploads, and AI matching are completely free. Premium features are available on our Pro plan.",
+    a: "Yes. JOB CV is a thesis project, so the main features are designed for demonstration, learning, and academic evaluation.",
   },
   {
     q: "How do I report a job scam or suspicious listing?",
-    a: "Use the 'Report' button on any job listing page, or email us at safety@jobcv.com and we'll investigate within 24 hours.",
+    a: "Use the contact form or email loemtheankou168@gmail.com with the job details so the issue can be reviewed.",
   },
 ];
 
@@ -101,7 +100,7 @@ export default function ContactUs() {
     setTimeout(() => {
       setLoading(false);
       setSubmitted(true);
-      toast.success("Message sent! We'll get back to you within 24 hours.");
+      toast.success("Message sent! Your message has been submitted.");
     }, 1500);
   };
 
@@ -118,13 +117,14 @@ export default function ContactUs() {
             Get in Touch
           </Badge>
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground leading-tight mb-5">
-            We'd love to{" "}
+            Contact{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-              hear from you
+              JOB CV
             </span>
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Have a question, feedback, or partnership inquiry? Our team typically responds within one business day.
+            Have a question, feedback, or thesis project inquiry? Contact Loem Theankou directly using the details
+            below.
           </p>
         </div>
       </section>
@@ -169,7 +169,7 @@ export default function ContactUs() {
               </Badge>
               <h2 className="text-2xl font-bold text-foreground">How can we help?</h2>
               <p className="mt-2 text-muted-foreground text-sm">
-                Fill out the form and our team will get back to you within 24 hours.
+                Fill out the form or contact Loem Theankou directly for JOB CV thesis project questions.
               </p>
             </div>
 
@@ -181,7 +181,8 @@ export default function ContactUs() {
                   </div>
                   <h3 className="text-xl font-bold text-foreground mb-2">Message Sent!</h3>
                   <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                    Thanks for reaching out, <strong>{form.name}</strong>. We'll reply to <strong>{form.email}</strong> within one business day.
+                    Thanks for reaching out, <strong>{form.name}</strong>. A reply can be sent to{" "}
+                    <strong>{form.email}</strong>.
                   </p>
                   <Button
                     variant="outline"
@@ -201,7 +202,7 @@ export default function ContactUs() {
                         <Input
                           id="contact-name"
                           name="name"
-                          placeholder="Thanh Khanh"
+                          placeholder="Loem Theankou"
                           className="h-11 bg-background"
                           value={form.name}
                           onChange={handleChange}
@@ -215,7 +216,7 @@ export default function ContactUs() {
                           id="contact-email"
                           name="email"
                           type="email"
-                          placeholder="you@example.com"
+                          placeholder="loemtheankou168@gmail.com"
                           className="h-11 bg-background"
                           value={form.email}
                           onChange={handleChange}
@@ -235,11 +236,11 @@ export default function ContactUs() {
                         onChange={handleChange}
                         disabled={loading}
                       >
-                        <option value="">Select a topic…</option>
+                        <option value="">Select a topic...</option>
                         <option value="general">General Inquiry</option>
-                        <option value="technical">Technical Support</option>
-                        <option value="account">Account & Billing</option>
-                        <option value="partnership">Partnership</option>
+                        <option value="technical">Technical Question</option>
+                        <option value="thesis">Thesis Project</option>
+                        <option value="feedback">Feedback</option>
                         <option value="report">Report a Problem</option>
                         <option value="other">Other</option>
                       </select>
@@ -250,7 +251,7 @@ export default function ContactUs() {
                       <Textarea
                         id="contact-message"
                         name="message"
-                        placeholder="Tell us what's on your mind…"
+                        placeholder="Tell us what's on your mind..."
                         className="min-h-[140px] bg-background resize-none"
                         value={form.message}
                         onChange={handleChange}
@@ -267,7 +268,7 @@ export default function ContactUs() {
                       {loading ? (
                         <>
                           <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Sending…
+                          Sending...
                         </>
                       ) : (
                         <>
@@ -291,12 +292,12 @@ export default function ContactUs() {
                   <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                     <Clock className="h-4 w-4" />
                   </div>
-                  <h3 className="font-semibold text-foreground">Office Hours</h3>
+                  <h3 className="font-semibold text-foreground">Contact Hours</h3>
                 </div>
                 <div className="space-y-2 text-sm text-muted-foreground">
                   {[
-                    { day: "Monday – Friday", hours: "8:00 AM – 5:30 PM" },
-                    { day: "Saturday", hours: "9:00 AM – 12:00 PM" },
+                    { day: "Monday - Friday", hours: "8:00 AM - 5:30 PM" },
+                    { day: "Saturday", hours: "9:00 AM - 12:00 PM" },
                     { day: "Sunday", hours: "Closed" },
                   ].map(({ day, hours }) => (
                     <div key={day} className="flex justify-between">
@@ -309,54 +310,46 @@ export default function ContactUs() {
               </CardContent>
             </Card>
 
-            {/* Support channels */}
+            {/* Direct contact */}
             <Card className="border-border bg-card shadow-sm">
               <CardContent className="pt-5 pb-5">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-9 w-9 rounded-lg bg-accent/10 text-accent-foreground flex items-center justify-center">
-                    <Headphones className="h-4 w-4" />
+                    <User className="h-4 w-4" />
                   </div>
-                  <h3 className="font-semibold text-foreground">Support Channels</h3>
+                  <h3 className="font-semibold text-foreground">Direct Contact</h3>
                 </div>
                 <div className="space-y-3 text-sm">
                   {[
-                    { label: "Technical Issues", email: "support@jobcv.com", response: "< 4 hours" },
-                    { label: "Account Help", email: "accounts@jobcv.com", response: "< 12 hours" },
-                    { label: "Safety & Reports", email: "safety@jobcv.com", response: "< 24 hours" },
-                  ].map(({ label, email, response }) => (
+                    { label: "Name", value: "Loem Theankou" },
+                    { label: "Email", value: "loemtheankou168@gmail.com" },
+                    { label: "Phone", value: "087459323" },
+                    { label: "Location", value: "Phnom Penh, Cambodia" },
+                  ].map(({ label, value }) => (
                     <div key={label} className="p-3 rounded-lg bg-muted/50">
                       <p className="font-medium text-foreground text-xs">{label}</p>
-                      <p className="text-primary text-xs mt-0.5">{email}</p>
-                      <p className="text-muted-foreground text-xs mt-0.5">Response: {response}</p>
+                      <p className="text-primary text-xs mt-0.5 break-words">{value}</p>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Social */}
+            {/* Project note */}
             <Card className="border-border bg-card shadow-sm">
               <CardContent className="pt-5 pb-5">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-9 w-9 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center">
                     <MessageSquare className="h-4 w-4" />
                   </div>
-                  <h3 className="font-semibold text-foreground">Social Media</h3>
+                  <h3 className="font-semibold text-foreground">Project Note</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Follow us for career tips, company updates, and job alerts.
+                  JOB CV is a thesis web application focused on AI-assisted CV matching and recruitment workflows.
                 </p>
-                <div className="flex gap-2 flex-wrap">
-                  {["LinkedIn", "Twitter / X", "Facebook", "YouTube"].map(platform => (
-                    <Badge
-                      key={platform}
-                      variant="outline"
-                      className="text-xs cursor-pointer hover:border-primary hover:text-primary transition-colors"
-                    >
-                      {platform}
-                    </Badge>
-                  ))}
-                </div>
+                <Badge variant="outline" className="text-xs">
+                  Phnom Penh, Cambodia
+                </Badge>
               </CardContent>
             </Card>
           </aside>
@@ -372,7 +365,7 @@ export default function ContactUs() {
             </Badge>
             <h2 className="text-3xl font-bold text-foreground">Frequently Asked Questions</h2>
             <p className="mt-3 text-muted-foreground">
-              Can't find an answer? Reach out and we'll get back to you.
+              Can't find an answer? Reach out to Loem Theankou using the contact details above.
             </p>
           </div>
           <div className="space-y-4">

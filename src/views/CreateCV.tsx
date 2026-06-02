@@ -17,6 +17,7 @@ type CvForm = {
   location: string;
   summary: string;
   skills: string;
+  languages: string;
   experience: string;
   education: string;
   links: string;
@@ -30,6 +31,7 @@ const initial: CvForm = {
   location: "",
   summary: "",
   skills: "",
+  languages: "",
   experience: "",
   education: "",
   links: "",
@@ -50,6 +52,15 @@ export default function CreateCV() {
         .map(s => s.trim())
         .filter(Boolean),
     [form.skills]
+  );
+
+  const languages = useMemo(
+    () =>
+      form.languages
+        .split(",")
+        .map(language => language.trim())
+        .filter(Boolean),
+    [form.languages]
   );
 
   useEffect(() => {
@@ -185,6 +196,7 @@ export default function CreateCV() {
 
       addSidebarSection("Contact", contact);
       addSidebarSection("Skills", skills.join("\n"));
+      addSidebarSection("Languages", languages.join("\n"));
       addSidebarSection("Education", form.education);
       addSidebarSection("Links", form.links);
 
@@ -284,6 +296,14 @@ export default function CreateCV() {
               />
             </div>
             <div className="space-y-2">
+              <Label>Languages (comma-separated)</Label>
+              <Input
+                value={form.languages}
+                onChange={e => update("languages", e.target.value)}
+                placeholder="English, Khmer"
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Experience</Label>
               <Textarea
                 rows={6}
@@ -350,6 +370,19 @@ export default function CreateCV() {
                         >
                           {s}
                         </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {languages.length > 0 && (
+                  <div className="mb-7">
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[hsl(42,78%,70%)]">
+                      Languages
+                    </h4>
+                    <div className="space-y-1 text-xs text-white/80">
+                      {languages.map(language => (
+                        <p key={language}>{language}</p>
                       ))}
                     </div>
                   </div>
