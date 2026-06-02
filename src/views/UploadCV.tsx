@@ -15,6 +15,7 @@ export default function UploadCV() {
   const [cvText, setCvText] = useState("");
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ fileName: string; fileContent: string; mimeType: string } | null>(null);
 
   const recommend = trpc.cv.recommend.useMutation();
   const analyzeLLM = trpc.cv.analyzeLLM.useMutation();
@@ -25,19 +26,29 @@ export default function UploadCV() {
     if (!file) return;
     setFileName(file.name);
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext && ["txt", "md", "csv"].includes(ext)) {
-      const text = await file.text();
-      setCvText(text);
-      toast.success("File content loaded");
-    } else {
-      toast.info("For PDF/DOCX files, please paste the text content below for analysis.");
-    }
 
-    // Upload to storage if authenticated
-    if (isAuthenticated) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(",")[1];
+    // Convert file to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      setUploadedFile({
+        fileName: file.name,
+        fileContent: base64,
+        mimeType: file.type || "application/octet-stream",
+      });
+
+      if (ext && ["txt", "md", "csv"].includes(ext)) {
+        file.text().then((text) => {
+          setCvText(text);
+          toast.success("Text content loaded from file");
+        });
+      } else {
+        setCvText(`[File loaded for analysis: ${file.name}]`);
+        toast.success("File uploaded successfully. Ready to Match Jobs!");
+      }
+
+      // Upload to storage if authenticated
+      if (isAuthenticated) {
         uploadMutation.mutate({
           fileName: file.name,
           fileContent: base64,
@@ -47,18 +58,26 @@ export default function UploadCV() {
           onSuccess: () => toast.success("CV saved to your account"),
           onError: () => toast.error("Failed to save CV"),
         });
-      };
-      reader.readAsDataURL(file);
-    }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAnalyze = () => {
-    if (cvText.trim().length < 10) { toast.error("Please enter at least 10 characters of CV text"); return; }
-    recommend.mutate({ cvText });
+    if (uploadedFile) {
+      recommend.mutate({ file: uploadedFile });
+    } else {
+      if (cvText.trim().length < 10) { toast.error("Please enter at least 10 characters of CV text"); return; }
+      recommend.mutate({ cvText });
+    }
   };
 
   const handleLLMAnalysis = () => {
-    if (cvText.trim().length < 10) { toast.error("Please enter at least 10 characters of CV text"); return; }
+    // If user has a file, but LLM only accepts text, use cvText which contains file status or text content
+    if (cvText.trim().length < 10 || cvText.startsWith("[File loaded")) {
+      toast.error("Please paste your CV text content below for AI Career Analysis");
+      return;
+    }
     analyzeLLM.mutate({ cvText });
   };
 
@@ -205,6 +224,16 @@ export default function UploadCV() {
                           </div>
                         </div>
                       </div>
+                      {job.mismatchReasons && job.mismatchReasons.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-dashed border-border/60">
+                          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Mismatch Analysis:</p>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {job.mismatchReasons.map((reason, i) => (
+                              <li key={i} className="text-xs text-muted-foreground">{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       <div className="mt-3 flex items-center justify-between border-t pt-2 border-border/60">
                         <p className="text-sm font-medium text-primary">{job.salary} · {job.level}</p>
                         <span className="text-xs text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

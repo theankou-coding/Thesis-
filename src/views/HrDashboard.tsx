@@ -9,6 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import {
@@ -24,7 +34,7 @@ import {
   User,
   Image as ImageIcon,
   CheckCircle,
-  AlertCircle,
+  Users,
   Eye,
 } from "lucide-react";
 import Link from "next/link";
@@ -39,11 +49,26 @@ interface ImageUploadPreview {
   previewUrl: string;
 }
 
+import { useSearchParams } from "next/navigation";
+
 export default function HrDashboard() {
   const { user, isAuthenticated, loading, refresh } = useAuth();
   const utils = trpc.useUtils();
 
+  const searchParams = useSearchParams();
+  const tabParam = searchParams ? searchParams.get("tab") : null;
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+
+  useEffect(() => {
+    if (tabParam === "overview" || tabParam === "post-job" || tabParam === "manage-jobs") {
+      setActiveTab(tabParam as TabType);
+    } else if (!tabParam) {
+      setActiveTab("overview");
+    }
+  }, [tabParam]);
+
+  // Delete confirmation state
+  const [jobToDelete, setJobToDelete] = useState<{ id: number; title: string } | null>(null);
 
   // Registration states
   const [regCompany, setRegCompany] = useState("");
@@ -67,6 +92,11 @@ export default function HrDashboard() {
 
   const { data: myJobs, isLoading: jobsLoading } = trpc.hr.myJobs.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "hr",
+  });
+
+  // Fetch all applications to show per-job applicant counts
+  const { data: allApplications } = trpc.applications.myApplications.useQuery(undefined, {
+    enabled: false, // HR can't view others' applications via this endpoint — we show job-level totals from myJobs
   });
 
   // Mutations
@@ -149,13 +179,18 @@ export default function HrDashboard() {
     postJobMutation.mutate(payload);
   };
 
-  const handleDeleteJob = async (jobId: number) => {
-    if (confirm("Are you sure you want to delete this job posting? This action cannot be undone.")) {
-      try {
-        await deleteJobMutation.mutateAsync({ id: jobId });
-      } catch (e) {
-        console.error(e);
-      }
+  const handleDeleteJob = (jobId: number, title: string) => {
+    setJobToDelete({ id: jobId, title });
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+    try {
+      await deleteJobMutation.mutateAsync({ id: jobToDelete.id });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setJobToDelete(null);
     }
   };
 
@@ -306,6 +341,29 @@ export default function HrDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* ── Delete Confirmation Dialog ── */}
+      <AlertDialog open={!!jobToDelete} onOpenChange={(open) => !open && setJobToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Job Posting?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to permanently delete <span className="font-semibold text-foreground">&ldquo;{jobToDelete?.title}&rdquo;</span>.
+              This will remove the listing from the job board immediately and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteJob}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteJobMutation.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting…</>
+              ) : "Yes, Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Header Info */}
       <div className="border-b border-border bg-gradient-to-br from-primary/10 via-background to-accent/5">
         <div className="container py-10 max-w-5xl">
@@ -380,7 +438,7 @@ export default function HrDashboard() {
                     <span className="text-3xl font-bold tracking-tight">
                       {jobsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : myJobs?.length ?? 0}
                     </span>
-                    <span className="text-xs text-muted-foreground">positions</span>
+                    <span className="text-xs text-muted-foreground">position{(myJobs?.length ?? 0) !== 1 ? "s" : ""}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -485,7 +543,7 @@ export default function HrDashboard() {
                           variant="outline"
                           size="sm"
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20 h-9"
-                          onClick={() => handleDeleteJob(job.id)}
+                          onClick={() => handleDeleteJob(job.id, job.title)}
                           disabled={deleteJobMutation.isPending}
                         >
                           <Trash2 className="h-4 w-4" />

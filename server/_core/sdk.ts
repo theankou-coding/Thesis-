@@ -284,6 +284,7 @@ class SDKServer {
       email: user.email,
       loginMethod: user.loginMethod,
       lastSignedIn: signedInAt,
+      role: user.role,            // ← preserve existing role (HR/admin/user)
     });
 
     return user;

@@ -6,7 +6,7 @@ import { Link } from "@/lib/wouter-compat";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Eye, EyeOff, Mail } from "lucide-react";
+import { Eye, EyeOff, Mail, Users, Briefcase, Building, Sparkles } from "lucide-react";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -17,6 +17,11 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Role and HR specific states
+  const [role, setRole] = useState<"user" | "hr">("user");
+  const [company, setCompany] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
 
   // Profile image upload states
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -79,6 +84,10 @@ export default function Register() {
     else if (password.length < 6) errs.password = "Password must be at least 6 characters";
     if (password !== confirmPassword) errs.confirmPassword = "Passwords do not match";
     
+    if (role === "hr" && !company.trim()) {
+      errs.company = "Company name is required for HR accounts";
+    }
+
     if (!base64Content) {
       setImageError("Profile image is required");
       errs.profileImage = "Profile image is required";
@@ -98,13 +107,15 @@ export default function Register() {
       profileImageContent: base64Content,
       profileImageName: imageFile.name,
       profileImageMime: imageFile.type,
+      role,
+      company: role === "hr" ? company : undefined,
+      jobTitle: role === "hr" && jobTitle ? jobTitle : undefined,
     });
   };
 
   return (
     <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center px-4 py-12">
-<<<<<<< HEAD
-      <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)] bg-card text-card-foreground">
+      <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)] bg-card text-card-foreground animate-in fade-in duration-500">
         {registeredEmail ? (
           <CardContent className="pt-10 pb-10 text-center space-y-6">
             <div className="flex justify-center">
@@ -114,20 +125,6 @@ export default function Register() {
                   <Mail className="h-8 w-8" />
                 </div>
               </div>
-=======
-      <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)]">
-        <CardHeader className="text-center pb-2">
-          <img src="logo.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
-          <CardTitle className="text-2xl font-bold text-primary">Create Account</CardTitle>
-          <CardDescription className="text-muted-foreground">Join the platform and start your career journey</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" value={name} onChange={e => setName(e.target.value)} placeholder="John Doe" className="h-11" />
-              {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
->>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
             </div>
             <div className="space-y-2">
               <CardTitle className="text-2xl font-bold text-foreground">Confirm Your Email</CardTitle>
@@ -154,6 +151,42 @@ export default function Register() {
             </CardHeader>
             <CardContent className="space-y-6 pt-4">
               <form onSubmit={handleSubmit} className="space-y-4">
+                
+                {/* Role Selector */}
+                <div className="space-y-2.5">
+                  <Label className="text-sm font-semibold text-foreground">I want to register as a <span className="text-destructive">*</span></Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setRole("user")}
+                      className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
+                        role === "user"
+                          ? "border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]"
+                          : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      }`}
+                      disabled={registerMutation.isPending}
+                    >
+                      <Users className="h-6 w-6 mb-2" />
+                      <span className="font-bold text-sm">Job Seeker</span>
+                      <span className="text-[10px] text-center mt-1 opacity-80 leading-tight">Find jobs & build CV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole("hr")}
+                      className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer ${
+                        role === "hr"
+                          ? "border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]"
+                          : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      }`}
+                      disabled={registerMutation.isPending}
+                    >
+                      <Briefcase className="h-6 w-6 mb-2" />
+                      <span className="font-bold text-sm">HR Recruiter</span>
+                      <span className="text-[10px] text-center mt-1 opacity-80 leading-tight">Post jobs & hire talent</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Profile Photo Upload */}
                 <div className="flex flex-col items-center space-y-3 mb-6">
                   <Label className="text-sm font-semibold text-foreground">Profile Picture <span className="text-destructive">*</span></Label>
@@ -198,6 +231,41 @@ export default function Register() {
                   />
                   {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
                 </div>
+
+                {/* HR business fields */}
+                {role === "hr" && (
+                  <div className="space-y-4 border-l-2 border-primary/20 pl-4 py-1 my-2 bg-primary/[0.01] rounded-r-lg animate-in fade-in slide-in-from-left-2 duration-300">
+                    <div className="space-y-2">
+                      <Label htmlFor="company" className="flex items-center gap-1">
+                        <Building className="h-3.5 w-3.5 text-primary" /> Company Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="company"
+                        value={company}
+                        onChange={e => setCompany(e.target.value)}
+                        placeholder="e.g. Acme Corporation"
+                        className="h-11 bg-background text-foreground"
+                        disabled={registerMutation.isPending}
+                        required
+                      />
+                      {errors.company && <p className="text-xs text-destructive">{errors.company}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="job-title" className="flex items-center gap-1">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" /> HR Job Title / Position
+                      </Label>
+                      <Input
+                        id="job-title"
+                        value={jobTitle}
+                        onChange={e => setJobTitle(e.target.value)}
+                        placeholder="e.g. Talent Acquisition Lead"
+                        className="h-11 bg-background text-foreground"
+                        disabled={registerMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="reg-email">Email Address</Label>
                   <Input
@@ -224,58 +292,58 @@ export default function Register() {
                       className="h-11 pr-10 bg-background text-foreground"
                       disabled={registerMutation.isPending}
                       required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
-              <div className="relative">
-                <Input
-                  id="confirm-password"
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="h-11 pr-10 bg-background text-foreground"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="h-11 pr-10 bg-background text-foreground"
+                      disabled={registerMutation.isPending}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword}</p>}
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold cursor-pointer rounded-xl transition-all"
                   disabled={registerMutation.isPending}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                 >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword}</p>}
-            </div>
-            <Button
-              type="submit"
-              className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-              disabled={registerMutation.isPending}
-            >
-              {registerMutation.isPending ? "Creating Account..." : "Create Account"}
-            </Button>
-          </form>
+                  {registerMutation.isPending ? "Creating Account..." : "Create Account"}
+                </Button>
+              </form>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login">
-              <span className="font-semibold text-primary hover:underline cursor-pointer">Sign In</span>
-            </Link>
-          </p>
-        </CardContent>
+              <p className="text-center text-sm text-muted-foreground">
+                Already have an account?{" "}
+                <Link href="/login">
+                  <span className="font-semibold text-primary hover:underline cursor-pointer">Sign In</span>
+                </Link>
+              </p>
+            </CardContent>
           </>
         )}
       </Card>

@@ -1,11 +1,6 @@
 export const ENV = {
-<<<<<<< HEAD
-  appId: process.env.NEXT_PUBLIC_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? "super-secret-fallback-for-dev-use-proper-one-in-prod",
-=======
   appId: process.env.NEXT_PUBLIC_APP_ID ?? "jobcv-next",
   cookieSecret: process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? "jobcv-next-dev-secret",
->>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
@@ -20,5 +15,6 @@ export const ENV = {
   s3CvBucket: process.env.S3_CV_BUCKET ?? "cvs",
   s3Endpoint: process.env.S3_ENDPOINT ?? "",
   s3Region: process.env.S3_REGION ?? "ap-southeast-1",
+  recommendationApiUrl: process.env.RECOMMENDATION_API_URL ?? "http://localhost:8000",
 };
 

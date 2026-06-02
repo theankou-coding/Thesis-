@@ -1,6 +1,5 @@
 import { systemRouter } from "./_core/systemRouter";
-<<<<<<< HEAD
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { expireSessionCookie, setSessionCookie } from "./_core/context";
 import { z } from "zod";
 import {
@@ -25,17 +24,13 @@ import {
   createJob,
   deleteJob,
   updateUserRole,
+  getAdminDashboardSnapshot,
 } from "./db";
-=======
-import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { expireSessionCookie } from "./_core/context";
-import { z } from "zod";
-import { getJobs, getAllJobs, createCvUpload, getUserCvUploads, getAdminDashboardSnapshot } from "./db";
->>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
 import { invokeLLM } from "./_core/llm";
 import { storagePut, storagePutCv } from "./storage";
 import { sdk } from "./_core/sdk";
 import { ONE_YEAR_MS } from "@shared/const";
+import { ENV } from "./_core/env";
 
 // Helper: normalize text for keyword matching
 function normalize(value: string) {
@@ -73,12 +68,19 @@ export const appRouter = router({
           profileImageContent: z.string().min(1, "Profile image is required"),
           profileImageName: z.string(),
           profileImageMime: z.string(),
+          role: z.enum(["user", "hr"]).default("user"),
+          company: z.string().optional(),
+          jobTitle: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const supabase = getSupabase();
         if (!supabase) {
           throw new Error("Supabase is not configured");
+        }
+
+        if (input.role === "hr" && !input.company) {
+          throw new Error("Company name is required for HR accounts");
         }
 
         const { data, error } = await supabase.auth.signUp({
@@ -104,7 +106,7 @@ export const appRouter = router({
         const fileKey = `profile-images/${data.user.id}/${Date.now()}-${input.profileImageName}`;
         const { url: imageUrl } = await storagePut(fileKey, buffer, input.profileImageMime);
 
-        // Upsert the user into the local database with Name:::AvatarUrl
+        // Upsert the user into the local database with Name:::AvatarUrl and selected role
         await upsertUser({
           openId: data.user.id,
           name: `${input.name}:::${imageUrl}`,
@@ -112,7 +114,22 @@ export const appRouter = router({
           loginMethod: "email",
           lastSignedIn: null, // User has not signed in yet (must confirm email first)
           profileImageUrl: imageUrl,
+          role: input.role,
         });
+
+        // Setup HR extra fields if registering as HR
+        if (input.role === "hr") {
+          const dbUser = await getUserByOpenId(data.user.id);
+          if (!dbUser) {
+            throw new Error("Failed to retrieve created user record for HR registration");
+          }
+          await upsertHrUser({
+            userId: dbUser.id,
+            company: input.company!,
+            jobTitle: input.jobTitle || null,
+            verified: true, // Default to true for thesis testing simplicity
+          });
+        }
 
         return { success: true, email: input.email, needsConfirmation: true };
       }),
@@ -228,15 +245,127 @@ export const appRouter = router({
 
   cv: router({
     recommend: publicProcedure
-      .input(z.object({ cvText: z.string().min(10) }))
+      .input(
+        z.object({
+          cvText: z.string().optional(),
+          file: z
+            .object({
+              fileName: z.string(),
+              fileContent: z.string(), // base64 string
+              mimeType: z.string(),
+            })
+            .optional(),
+        })
+      )
       .mutation(async ({ input }) => {
+        let fileContentBuffer: Buffer;
+        let fileName: string;
+        let mimeType: string;
+
+        if (input.file) {
+          fileContentBuffer = Buffer.from(input.file.fileContent, "base64");
+          fileName = input.file.fileName;
+          mimeType = input.file.mimeType;
+        } else if (input.cvText) {
+          fileContentBuffer = Buffer.from(input.cvText, "utf-8");
+          fileName = "cv_input.txt";
+          mimeType = "text/plain";
+        } else {
+          throw new Error("Either cvText or file must be provided.");
+        }
+
         const jobList = await getAllJobs();
-        const recommendations = scoreJobs(input.cvText, jobList);
-        const detectedSkills = Array.from(new Set(
-          jobList.flatMap(j => j.skills.split(",").map(s => s.trim()))
-            .filter(skill => normalize(input.cvText).includes(normalize(skill)))
-        )).slice(0, 20);
-        return { recommendations, detectedSkills, analyzedAt: new Date().toISOString() };
+
+        try {
+          const formData = new FormData();
+          const blob = new Blob([new Uint8Array(fileContentBuffer)], { type: mimeType });
+          formData.append("file", blob, fileName);
+
+          console.log(`[FastAPI Proxy] Sending CV to matching engine at ${ENV.recommendationApiUrl}/api/v1/match_cv...`);
+          const response = await fetch(`${ENV.recommendationApiUrl}/api/v1/match_cv`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            console.error(`[FastAPI Proxy] Matching engine returned error: ${response.status} - ${errText}`);
+            throw new Error(`Matching service error: ${errText || response.statusText}`);
+          }
+
+          const result = (await response.json()) as {
+            filename: string;
+            matches: Array<{
+              job_id: string;
+              job_title: string;
+              company_name: string;
+              match_score: string;
+              mismatch_analysis: {
+                why_not_higher_reasons: string[];
+                missing_skills_detected: string[];
+              };
+              status: string;
+              salary_range: { min: number; max: number; currency: string };
+            }>;
+          };
+
+          // Map matches to database jobs
+          const recommendations = result.matches
+            .map((match) => {
+              const dbJob = jobList.find((j) => j.id === parseInt(match.job_id));
+              if (!dbJob) return null;
+              
+              const score = parseFloat(match.match_score.replace("%", ""));
+              const missingSkills = match.mismatch_analysis.missing_skills_detected;
+              const allSkills = dbJob.skills.split(",").map((s) => s.trim());
+              const matchedSkills = allSkills.filter(
+                (skill) => !missingSkills.some((m) => m.toLowerCase() === skill.toLowerCase())
+              );
+
+              return {
+                ...dbJob,
+                score: Math.round(score),
+                matchedSkills,
+                missingSkills,
+                mismatchReasons: match.mismatch_analysis.why_not_higher_reasons,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+
+          // Get detected skills from matching jobs
+          const detectedSkills = Array.from(
+            new Set(recommendations.flatMap((rec) => rec.matchedSkills))
+          ).slice(0, 20);
+
+          return {
+            recommendations,
+            detectedSkills,
+            analyzedAt: new Date().toISOString(),
+          };
+        } catch (error: any) {
+          console.error("[FastAPI Proxy] Recommendation API call failed, falling back to local search:", error);
+          
+          let cvTextFallback = input.cvText || "";
+          if (input.file && ["txt", "md", "csv"].some(ext => input.file!.fileName.toLowerCase().endsWith(ext))) {
+             cvTextFallback = fileContentBuffer.toString("utf-8");
+          }
+          
+          const recommendations = scoreJobs(cvTextFallback, jobList);
+          const detectedSkills = Array.from(
+            new Set(
+              jobList
+                .flatMap((j) => j.skills.split(",").map((s) => s.trim()))
+                .filter((skill) => normalize(cvTextFallback).includes(normalize(skill)))
+            )
+          ).slice(0, 20);
+
+          return {
+            recommendations: recommendations.map(r => ({ ...r, mismatchReasons: [] as string[] })),
+            detectedSkills,
+            analyzedAt: new Date().toISOString(),
+            fallback: true,
+          };
+        }
       }),
 
     analyzeLLM: publicProcedure
@@ -386,6 +515,18 @@ Return ONLY valid JSON, no markdown fences.`
           skills: input.skills,
           salary: input.salary,
         });
+
+        // Trigger a background call to reload jobs in FastAPI to update the vector index
+        try {
+          fetch(`${ENV.recommendationApiUrl}/api/v1/reload_jobs`, { method: "POST" })
+            .then(res => {
+              if (res.ok) console.log("[FastAPI] Successfully triggered jobs reload");
+              else console.warn("[FastAPI] Jobs reload failed with status:", res.status);
+            })
+            .catch(err => console.error("[FastAPI] Error triggering jobs reload:", err));
+        } catch (e) {
+          console.error("[FastAPI] Error starting jobs reload fetch:", e);
+        }
 
         if (input.images && input.images.length > 0) {
           const imageRows = await Promise.all(

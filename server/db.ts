@@ -204,6 +204,7 @@ export async function getUserByOpenId(openId: string) {
       lastSignedIn: now,
       createdAt: now,
       updatedAt: now,
+      profileImageUrl: null,
     } satisfies User;
   }
 
@@ -314,7 +315,6 @@ export async function getUserCvUploads(userId: number) {
   return (data ?? []).map((row) => mapCvUpload(row as DbRow));
 }
 
-<<<<<<< HEAD
 // ---------------------------------------------------------------------------
 // Extended Feature Types & Mappers
 // ---------------------------------------------------------------------------
@@ -646,7 +646,7 @@ export async function updateUserRole(userId: number, role: string): Promise<void
     throw error;
   }
 }
-=======
+
 export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot> {
   const emptySnapshot: AdminDashboardSnapshot = {
     refreshedAt: new Date().toISOString(),
@@ -793,4 +793,3 @@ export async function getAdminDashboardSnapshot(): Promise<AdminDashboardSnapsho
     }),
   };
 }
->>>>>>> d468b1cd210411139bf111209d11bdbd4d3525ec
