@@ -21,10 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
+  AlertCircle,
   ArrowRight,
   ExternalLink,
   FileText,
   Loader2,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -304,16 +306,35 @@ export default function UploadCV() {
         <section className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Matching Jobs Using CV</h2>
+              <h2 className="text-xl font-bold text-foreground">AI Job Matching</h2>
               <p className="text-sm text-muted-foreground">
-                Run matching against the selected CV to find jobs that fit your profile.
+                Powered by FAISS HNSW + Sentence-Transformers · Upload your CV to get AI-ranked job recommendations.
               </p>
             </div>
             <Button onClick={handleMatch} disabled={isMatching || (!selectedCv && !pendingFile)}>
-              {isMatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-              Match Jobs
+              {isMatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Match with AI
             </Button>
           </div>
+
+          {matchData && (
+            <div className="flex items-center gap-2">
+              {(matchData as any).fallback ? (
+                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-800">
+                  <AlertCircle className="mr-1 h-3 w-3" />
+                  Keyword fallback — AI engine unavailable
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-800">
+                  <Sparkles className="mr-1 h-3 w-3" />
+                  AI Engine · FAISS HNSW + Cross-Encoder
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground">
+                Analyzed {matchData.analyzedAt ? new Date(matchData.analyzedAt).toLocaleTimeString() : ""}
+              </span>
+            </div>
+          )}
 
           {matchData?.detectedSkills && matchData.detectedSkills.length > 0 && (
             <Card className="shadow-sm bg-card text-card-foreground border-border">
@@ -380,6 +401,21 @@ export default function UploadCV() {
                           </div>
                         </div>
                       </div>
+
+                      {(job as any).mismatchReasons && (job as any).mismatchReasons.length > 0 && (
+                        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/30 dark:bg-amber-950/10 p-3">
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Why the score isn&apos;t higher
+                          </p>
+                          <ul className="space-y-0.5">
+                            {(job as any).mismatchReasons.map((reason: string, i: number) => (
+                              <li key={i} className="text-xs text-amber-700 dark:text-amber-400">• {reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <div className="mt-3 flex items-center justify-between border-t pt-2 border-border/60">
                         <p className="text-sm font-medium text-primary">{job.salary} · {job.level}</p>
                         <span className="text-xs text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
