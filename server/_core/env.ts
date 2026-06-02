@@ -1,6 +1,6 @@
 export const ENV = {
-  appId: process.env.NEXT_PUBLIC_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? "",
+  appId: process.env.NEXT_PUBLIC_APP_ID ?? "jobcv-next",
+  cookieSecret: process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? "jobcv-next-dev-secret",
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",

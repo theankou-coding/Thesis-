@@ -36,7 +36,7 @@ export default function Register() {
     <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md shadow-lg border-t-4 border-t-[hsl(42,78%,52%)]">
         <CardHeader className="text-center pb-2">
-          <img src="/manus-storage/jobcv-logo_f2b0a0df.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
+          <img src="logo.png" alt="JOB CV" className="h-10 mx-auto mb-4" />
           <CardTitle className="text-2xl font-bold text-primary">Create Account</CardTitle>
           <CardDescription className="text-muted-foreground">Join the platform and start your career journey</CardDescription>
         </CardHeader>
