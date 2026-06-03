@@ -144,7 +144,7 @@ export default function UploadCV() {
           Upload, choose, remove, and match your CVs with available jobs.
         </p>
         <Button asChild className="mt-6">
-          <a href={getLoginUrl()}>Sign In</a>
+          <Link href={getLoginUrl()}>Sign In</Link>
         </Button>
       </div>
     );

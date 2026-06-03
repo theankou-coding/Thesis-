@@ -52,7 +52,7 @@ const values = [
     icon: Users,
     title: "Academic Purpose",
     description:
-      "JOB CV is developed as a thesis project to study practical AI-powered CV matching for recruitment workflows.",
+      "JOBLINK is developed as a thesis project to study practical AI-powered CV matching for recruitment workflows.",
   },
 ];
 
@@ -86,13 +86,13 @@ export default function AboutUs() {
             </span>
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            JOB CV is an AI-powered thesis project created by Loem Theankou in Phnom Penh, Cambodia. It explores how
+            JOBLINK is an AI-powered thesis project created by Loem Theankou in Phnom Penh, Cambodia. It explores how
             candidate CVs can be analyzed and matched with suitable job opportunities using practical, user-friendly
             recruitment technology.
           </p>
         </div>
       </section>
-      
+
       {/* Values */}
       <section className="py-20 bg-muted/20 border-y border-border">
         <div className="container">
@@ -132,7 +132,7 @@ export default function AboutUs() {
           </Badge>
           <h2 className="text-3xl font-bold text-foreground">Founder</h2>
           <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-            JOB CV is developed as a thesis project by Loem Theankou, with a focus on AI-assisted recruitment and CV
+            JOBLINK is developed as a thesis project by Loem Theankou, with a focus on AI-assisted recruitment and CV
             matching for candidates in Cambodia.
           </p>
         </div>

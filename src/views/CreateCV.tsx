@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 type CvForm = {
@@ -38,7 +40,8 @@ const initial: CvForm = {
 };
 
 export default function CreateCV() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, loading, isAuthenticated } = useAuth();
   const [form, setForm] = useState<CvForm>(initial);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -62,6 +65,11 @@ export default function CreateCV() {
         .filter(Boolean),
     [form.languages]
   );
+
+  useEffect(() => {
+    if (loading || isAuthenticated) return;
+    router.replace(getLoginUrl());
+  }, [isAuthenticated, loading, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -218,6 +226,14 @@ export default function CreateCV() {
       setIsGenerating(false);
     }
   };
+
+  if (loading || !isAuthenticated) {
+    return (
+      <div className="container flex min-h-[50vh] items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="container py-10">

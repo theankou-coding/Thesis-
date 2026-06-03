@@ -64,8 +64,8 @@ const faqs = [
     a: "CV content and candidate information are handled carefully for the thesis project and are used to support the matching workflow.",
   },
   {
-    q: "Can I use JOB CV for free?",
-    a: "Yes. JOB CV is a thesis project, so the main features are designed for demonstration, learning, and academic evaluation.",
+    q: "Can I use JOBLINK for free?",
+    a: "Yes. JOBLINK is a thesis project, so the main features are designed for demonstration, learning, and academic evaluation.",
   },
   {
     q: "How do I report a job scam or suspicious listing?",
@@ -119,7 +119,7 @@ export default function ContactUs() {
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground leading-tight mb-5">
             Contact{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-              JOB CV
+              JOBLINK
             </span>
           </h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
@@ -169,7 +169,7 @@ export default function ContactUs() {
               </Badge>
               <h2 className="text-2xl font-bold text-foreground">How can we help?</h2>
               <p className="mt-2 text-muted-foreground text-sm">
-                Fill out the form or contact Loem Theankou directly for JOB CV thesis project questions.
+                Fill out the form or contact Loem Theankou directly for JOBLINK thesis project questions.
               </p>
             </div>
 
@@ -345,7 +345,7 @@ export default function ContactUs() {
                   <h3 className="font-semibold text-foreground">Project Note</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  JOB CV is a thesis web application focused on AI-assisted CV matching and recruitment workflows.
+                  JOBLINK is a thesis web application focused on AI-assisted CV matching and recruitment workflows.
                 </p>
                 <Badge variant="outline" className="text-xs">
                   Phnom Penh, Cambodia
